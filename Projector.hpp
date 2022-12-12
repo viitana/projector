@@ -34,9 +34,10 @@ namespace Projector
 	{
 		glm::vec2 pos;
 		glm::vec3 color;
+		glm::vec2 texCoord;
 
 		const static VkVertexInputBindingDescription GetBindingDescription();
-		const static std::array<VkVertexInputAttributeDescription, 2> GetAttributeDescriptions();
+		const static std::array<VkVertexInputAttributeDescription, 3> GetAttributeDescriptions();
 	};
 
 	struct QueueFamilyIndices
