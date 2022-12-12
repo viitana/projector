@@ -1104,7 +1104,6 @@ int main(int argc, char* argv[])
     {
         std::cout << "Caught exception: '" << e.what() << "'" << std::endl;
     }
-
    
     return 0;
 }

@@ -6,6 +6,8 @@ add_executable(projector main.cpp)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED True)
+set_property(TARGET projector PROPERTY CXX_STANDARD 17)
+set_property(TARGET projector PROPERTY CXX_STANDARD_REQUIRED ON)
 
 configure_file(config.hpp.in config.hpp)
 
