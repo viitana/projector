@@ -13,9 +13,17 @@
 #include <thread>
 #include <fstream>
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
+#include <glm/gtc/matrix_transform.hpp>
+
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#include <stb_image.h>
 
 #include "config.hpp"
 #include "util.hpp"
@@ -46,10 +54,17 @@ namespace Projector
 		std::vector<VkPresentModeKHR> presentModes;
 	};
 
+	struct UniformBufferObject
+	{
+		alignas(16) glm::mat4 model;
+		alignas(16) glm::mat4 view;
+		alignas(16) glm::mat4 proj;
+	};
+
 	class Projector
 	{
 	public:
-		Projector(const std::vector<Vertex>& vertices);
+		Projector(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
 		~Projector();
 
 		void Run();
@@ -65,6 +80,15 @@ namespace Projector
 		const bool IsDeviceSuitable(VkPhysicalDevice device) const;
 		const VkShaderModule CreateShaderModule(const std::vector<char>& code) const;
 		const uint32_t FindMemoryType(uint32_t typeFilter, VkMemoryPropertyFlags properties) const;
+		void CreateBuffer(VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory) const;
+		void CopyBuffer(VkBuffer srcBuffer, VkBuffer dstBuffer, VkDeviceSize size) const;
+		void CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) const;
+		void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) const;
+		void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const;
+		const VkImageView CreateImageView(VkImage image, VkFormat format) const;
+
+		const VkCommandBuffer BeginSingleTimeCommands() const;
+		void EndSingleTimeCommands(const VkCommandBuffer commandBuffer) const;
 
 		void CreateInstance();
 		void CreateSurface();
@@ -73,13 +97,22 @@ namespace Projector
 		void CreateSwapChain();
 		void CreateImageViews();
 		void CreateRenderPass();
+		void CreateDescriptorSetLayout();
 		void CreateGraphicsPipeline();
 		void CreateFramebuffers();
 		void CreateCommandPool();
+		void CreateTextureImage();
+		void CreateTextureImageView();
+		void CreateTextureSampler();
 		void CreateVertexBuffer();
+		void CreateIndexBuffer();
+		void CreateUniformBuffers();
+		void CreateDescriptorPool();
+		void CreateDescriptorSets();
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
 
+		void UpdateUniformBuffer(uint32_t currentImage);
 		void DrawFrame();
 		void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
 
@@ -110,8 +143,11 @@ namespace Projector
 		std::vector<VkFramebuffer> swapChainFramebuffers_;
 		bool framebufferResized_ = false;
 
-		// Render pipeline & passes
+		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
+		VkDescriptorSetLayout descriptorSetLayout_;
+		VkDescriptorPool descriptorPool_;
+		std::vector<VkDescriptorSet> descriptorSets_;
 		VkPipelineLayout pipelineLayout_;
 		VkPipeline graphicsPipeline_;
 
@@ -123,11 +159,23 @@ namespace Projector
 		std::vector<VkFence> inFlightFences_;
 		uint32_t currentFrame_ = 0;
 
-		// Vertex buffer
+		// Vertex, index & uniform buffer
 		VkBuffer vertexBuffer_;
 		VkDeviceMemory vertexBufferMemory_;
+		VkBuffer indexBuffer_;
+		VkDeviceMemory indexBufferMemory_;
+		std::vector<VkBuffer> uniformBuffers_;
+		std::vector<VkDeviceMemory> uniformBuffersMemory_;
+		std::vector<void*> uniformBuffersMapped_;
 
 		// Vertex data
 		const std::vector<Vertex>& vertices_;
+		const std::vector<uint32_t> indices_;
+
+		// Texture data
+		VkImage textureImage_;
+		VkDeviceMemory textureImageMemory_;
+		VkImageView textureImageView_;
+		VkSampler textureSampler_;
 	};
 }
