@@ -1,0 +1,4 @@
+#define VERSION_MAJOR @projector_VERSION_MAJOR@
+#define VERSION_MINOR @projector_VERSION_MINOR@
+
+// TODO 13: use cmakedefine to define USE_MYMATH
