@@ -13,11 +13,12 @@
 #include <thread>
 #include <fstream>
 
-#define GLM_FORCE_RADIANS
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
-
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
+
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 
@@ -32,7 +33,7 @@ namespace Projector
 {
 	struct Vertex
 	{
-		glm::vec2 pos;
+		glm::vec3 pos;
 		glm::vec3 color;
 		glm::vec2 texCoord;
 
@@ -86,7 +87,10 @@ namespace Projector
 		void CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) const;
 		void TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) const;
 		void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const;
-		const VkImageView CreateImageView(VkImage image, VkFormat format) const;
+		const VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) const;
+		const VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) const;
+		const VkFormat Projector::FindDepthFormat() const;
+		const bool HasStencilComponent(VkFormat format) const;
 
 		const VkCommandBuffer BeginSingleTimeCommands() const;
 		void EndSingleTimeCommands(const VkCommandBuffer commandBuffer) const;
@@ -100,8 +104,9 @@ namespace Projector
 		void CreateRenderPass();
 		void CreateDescriptorSetLayout();
 		void CreateGraphicsPipeline();
-		void CreateFramebuffers();
 		void CreateCommandPool();
+		void CreateDepthResources();
+		void CreateFramebuffers();
 		void CreateTextureImage();
 		void CreateTextureImageView();
 		void CreateTextureSampler();
@@ -143,6 +148,11 @@ namespace Projector
 		VkExtent2D swapChainExtent_;
 		std::vector<VkFramebuffer> swapChainFramebuffers_;
 		bool framebufferResized_ = false;
+
+		// Depth buffer/image
+		VkImage depthImage_;
+		VkDeviceMemory depthImageMemory_;
+		VkImageView depthImageView_;
 
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
