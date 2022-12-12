@@ -255,7 +255,6 @@ void createInstance()
     appInfo.engineVersion = VK_MAKE_VERSION(1, 0, 0);
     appInfo.apiVersion = VK_API_VERSION_1_3;
 
-
     VkInstanceCreateInfo createInfo{};
     createInfo.sType = VK_STRUCTURE_TYPE_INSTANCE_CREATE_INFO;
     createInfo.pApplicationInfo = &appInfo;
@@ -400,26 +399,27 @@ void pickPhysicalDevice()
     std::vector<VkPhysicalDevice> devices(deviceCount);
     vkEnumeratePhysicalDevices(vk, &deviceCount, devices.data());
 
+    std::string deviceName = "Unknown";
     std::cout << "Available devices: " << deviceCount << '\n';
     for (const auto& device : devices)
     {
         VkPhysicalDeviceProperties deviceProperties;
         vkGetPhysicalDeviceProperties(device, &deviceProperties);
         std::cout << '\t' << deviceProperties.deviceName << '\n';
-    }
 
-    for (const auto& device : devices)
-    {
         if (isDeviceSuitable(device))
         {
             physicalDevice = device;
+            deviceName = deviceProperties.deviceName;
             break;
         }
     }
 
-    if (physicalDevice == VK_NULL_HANDLE) {
+    if (physicalDevice == VK_NULL_HANDLE)
+    {
         throw std::runtime_error("failed to find a suitable GPU!");
     }
+    std::cout << "Picked device '" << deviceName << "'\n";
 }
 
 void createLogicalDevice()
@@ -431,7 +431,8 @@ void createLogicalDevice()
     std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
     std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
     float queuePriority = 1.0f;
-    for (uint32_t queueFamily : uniqueQueueFamilies) {
+    for (uint32_t queueFamily : uniqueQueueFamilies)
+    {
         VkDeviceQueueCreateInfo queueCreateInfo{};
         queueCreateInfo.sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO;
         queueCreateInfo.queueFamilyIndex = queueFamily;
