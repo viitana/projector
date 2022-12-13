@@ -12,6 +12,7 @@
 #include <chrono>
 #include <thread>
 #include <fstream>
+#include <unordered_map>
 
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
@@ -19,18 +20,30 @@
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
+#define GLM_ENABLE_EXPERIMENTAL
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
+#include <glm/gtx/hash.hpp>
 
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
 #include <stb_image.h>
+
+
 
 #include "config.hpp"
 #include "util.hpp"
 
 namespace Projector
 {
+	const int MAX_FRAMES_IN_FLIGHT = 2;
+
+	const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
+	const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
+
+	const std::string MODEL_PATH = "res/viking_room.obj";
+	const std::string TEXTURE_PATH = "res/viking_room.png";
+
 	struct Vertex
 	{
 		glm::vec3 pos;
@@ -39,6 +52,13 @@ namespace Projector
 
 		const static VkVertexInputBindingDescription GetBindingDescription();
 		const static std::array<VkVertexInputAttributeDescription, 3> GetAttributeDescriptions();
+
+		bool operator==(const Vertex& other) const
+		{
+			return pos == other.pos && color == other.color && texCoord == other.texCoord;
+		}
+
+
 	};
 
 	struct QueueFamilyIndices
@@ -66,7 +86,7 @@ namespace Projector
 	class Projector
 	{
 	public:
-		Projector(const std::vector<Vertex>& vertices, const std::vector<uint32_t>& indices);
+		Projector();
 		~Projector();
 
 		void Run();
@@ -110,6 +130,7 @@ namespace Projector
 		void CreateTextureImage();
 		void CreateTextureImageView();
 		void CreateTextureSampler();
+		void LoadModel();
 		void CreateVertexBuffer();
 		void CreateIndexBuffer();
 		void CreateUniformBuffers();
@@ -180,13 +201,26 @@ namespace Projector
 		std::vector<void*> uniformBuffersMapped_;
 
 		// Vertex data
-		const std::vector<Vertex>& vertices_;
-		const std::vector<uint32_t> indices_;
+		std::vector<Vertex> vertices_;
+		std::vector<uint32_t> indices_;
 
 		// Texture data
 		VkImage textureImage_;
 		VkDeviceMemory textureImageMemory_;
 		VkImageView textureImageView_;
 		VkSampler textureSampler_;
+	};
+}
+
+namespace std
+{
+	template<> struct hash<Projector::Vertex>
+	{
+		size_t operator()(Projector::Vertex const& vertex) const
+		{
+			return ((hash<glm::vec3>()(vertex.pos) ^
+				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
+				(hash<glm::vec2>()(vertex.texCoord) << 1);
+		}
 	};
 }
