@@ -24,6 +24,7 @@ namespace Projector
         CreateDescriptorSetLayout();
         CreateGraphicsPipeline();
         CreateCommandPool();
+        CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
         CreateTextureImage();
@@ -327,7 +328,7 @@ namespace Projector
         EndSingleTimeCommands(commandBuffer);
     }
 
-    void Projector::CreateImage(uint32_t width, uint32_t height, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) const
+    void Projector::CreateImage(uint32_t width, uint32_t height, uint32_t mipLevels, VkSampleCountFlagBits numSamples, VkFormat format, VkImageTiling tiling, VkImageUsageFlags usage, VkMemoryPropertyFlags properties, VkImage& image, VkDeviceMemory& imageMemory) const
     {
         VkImageCreateInfo imageInfo{};
         imageInfo.sType = VK_STRUCTURE_TYPE_IMAGE_CREATE_INFO;
@@ -335,13 +336,13 @@ namespace Projector
         imageInfo.extent.width = width;
         imageInfo.extent.height = height;
         imageInfo.extent.depth = 1;
-        imageInfo.mipLevels = 1;
+        imageInfo.mipLevels = mipLevels;
         imageInfo.arrayLayers = 1;
         imageInfo.format = format;
         imageInfo.tiling = tiling;
         imageInfo.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
         imageInfo.usage = usage;
-        imageInfo.samples = VK_SAMPLE_COUNT_1_BIT;
+        imageInfo.samples = numSamples;
         imageInfo.sharingMode = VK_SHARING_MODE_EXCLUSIVE;
 
         if (vkCreateImage(device_, &imageInfo, nullptr, &image) != VK_SUCCESS)
@@ -365,7 +366,7 @@ namespace Projector
         vkBindImageMemory(device_, image, imageMemory, 0);
     }
 
-    void Projector::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout) const
+    void Projector::TransitionImageLayout(VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels) const
     {
         VkImageMemoryBarrier barrier{};
         barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
@@ -376,7 +377,7 @@ namespace Projector
         barrier.image = image;
         barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
         barrier.subresourceRange.baseMipLevel = 0;
-        barrier.subresourceRange.levelCount = 1;
+        barrier.subresourceRange.levelCount = mipLevels;
         barrier.subresourceRange.baseArrayLayer = 0;
         barrier.subresourceRange.layerCount = 1;
 
@@ -448,7 +449,7 @@ namespace Projector
         EndSingleTimeCommands(commandBuffer);
     }
 
-    const VkImageView Projector::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags) const
+    const VkImageView Projector::CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) const
     {
         VkImageViewCreateInfo viewInfo{};
         viewInfo.sType = VK_STRUCTURE_TYPE_IMAGE_VIEW_CREATE_INFO;
@@ -457,7 +458,7 @@ namespace Projector
         viewInfo.format = format;
         viewInfo.subresourceRange.aspectMask = aspectFlags;
         viewInfo.subresourceRange.baseMipLevel = 0;
-        viewInfo.subresourceRange.levelCount = 1;
+        viewInfo.subresourceRange.levelCount = mipLevels;
         viewInfo.subresourceRange.baseArrayLayer = 0;
         viewInfo.subresourceRange.layerCount = 1;
 
@@ -501,6 +502,118 @@ namespace Projector
     const bool Projector::HasStencilComponent(VkFormat format) const
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
+    }
+
+    void Projector::GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) const
+    {
+        // Check if image format supports linear blitting
+        VkFormatProperties formatProperties;
+        vkGetPhysicalDeviceFormatProperties(physicalDevice_, imageFormat, &formatProperties);
+        if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
+        {
+            throw std::runtime_error("texture image format does not support linear blitting!");
+        }
+
+
+        VkImageMemoryBarrier barrier{};
+        barrier.sType = VK_STRUCTURE_TYPE_IMAGE_MEMORY_BARRIER;
+        barrier.image = image;
+        barrier.srcQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.dstQueueFamilyIndex = VK_QUEUE_FAMILY_IGNORED;
+        barrier.subresourceRange.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+        barrier.subresourceRange.baseArrayLayer = 0;
+        barrier.subresourceRange.layerCount = 1;
+        barrier.subresourceRange.levelCount = 1;
+
+        int32_t mipWidth = texWidth;
+        int32_t mipHeight = texHeight;
+
+        VkCommandBuffer commandBuffer = BeginSingleTimeCommands();
+        for (uint32_t i = 1; i < mipLevels; i++)
+        {
+            barrier.subresourceRange.baseMipLevel = i - 1;
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            barrier.dstAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+
+            vkCmdPipelineBarrier(commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_TRANSFER_BIT, 0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+
+            VkImageBlit blit{};
+            blit.srcOffsets[0] = { 0, 0, 0 };
+            blit.srcOffsets[1] = { mipWidth, mipHeight, 1 };
+            blit.srcSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.srcSubresource.mipLevel = i - 1;
+            blit.srcSubresource.baseArrayLayer = 0;
+            blit.srcSubresource.layerCount = 1;
+            blit.dstOffsets[0] = { 0, 0, 0 };
+            blit.dstOffsets[1] = { mipWidth > 1 ? mipWidth / 2 : 1, mipHeight > 1 ? mipHeight / 2 : 1, 1 };
+            blit.dstSubresource.aspectMask = VK_IMAGE_ASPECT_COLOR_BIT;
+            blit.dstSubresource.mipLevel = i;
+            blit.dstSubresource.baseArrayLayer = 0;
+            blit.dstSubresource.layerCount = 1;
+
+            vkCmdBlitImage(commandBuffer,
+                image, VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                image, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                1, &blit,
+                VK_FILTER_LINEAR
+            );
+
+            barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL;
+            barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+            barrier.srcAccessMask = VK_ACCESS_TRANSFER_READ_BIT;
+            barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+            vkCmdPipelineBarrier(commandBuffer,
+                VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+                0, nullptr,
+                0, nullptr,
+                1, &barrier
+            );
+
+            if (mipWidth > 1) mipWidth /= 2;
+            if (mipHeight > 1) mipHeight /= 2;
+        }
+
+        barrier.subresourceRange.baseMipLevel = mipLevels - 1;
+        barrier.oldLayout = VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL;
+        barrier.newLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+        barrier.srcAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+        barrier.dstAccessMask = VK_ACCESS_SHADER_READ_BIT;
+
+        vkCmdPipelineBarrier(commandBuffer,
+            VK_PIPELINE_STAGE_TRANSFER_BIT, VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT, 0,
+            0, nullptr,
+            0, nullptr,
+            1, &barrier
+        );
+
+        EndSingleTimeCommands(commandBuffer);
+    }
+
+    const VkSampleCountFlagBits Projector::GetMaxUsableSampleCount() const
+    {
+        VkPhysicalDeviceProperties physicalDeviceProperties;
+        vkGetPhysicalDeviceProperties(physicalDevice_, &physicalDeviceProperties);
+
+        VkSampleCountFlags counts =
+            physicalDeviceProperties.limits.framebufferColorSampleCounts &
+            physicalDeviceProperties.limits.framebufferDepthSampleCounts;
+
+        if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
+        if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
+        if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
+        if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
+        if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
+        if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
+
+        return VK_SAMPLE_COUNT_1_BIT;
     }
 
     void Projector::CreateInstance()
@@ -597,6 +710,8 @@ namespace Projector
             if (IsDeviceSuitable(device))
             {
                 physicalDevice_ = device;
+                msaaSamples_ = GetMaxUsableSampleCount();
+                std::cout << "Max MSAA sample count:  " << msaaSamples_ << "\n";
                 deviceName = deviceProperties.deviceName;
                 break;
             }
@@ -713,7 +828,7 @@ namespace Projector
         swapChainImageViews_.resize(swapChainImages_.size());
         for (uint32_t i = 0; i < swapChainImages_.size(); i++)
         {
-            swapChainImageViews_[i] = CreateImageView(swapChainImages_[i], swapChainImageFormat_, VK_IMAGE_ASPECT_COLOR_BIT);
+            swapChainImageViews_[i] = CreateImageView(swapChainImages_[i], swapChainImageFormat_, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
@@ -721,11 +836,11 @@ namespace Projector
     {
         VkAttachmentDescription colorAttachment{};
         colorAttachment.format = swapChainImageFormat_;
-        colorAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachment.samples = msaaSamples_;
         colorAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         colorAttachment.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
         colorAttachment.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
-        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+        colorAttachment.finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
 
         VkAttachmentReference colorAttachmentRef{};
         colorAttachmentRef.attachment = 0;
@@ -733,7 +848,7 @@ namespace Projector
 
         VkAttachmentDescription depthAttachment{};
         depthAttachment.format = FindDepthFormat();
-        depthAttachment.samples = VK_SAMPLE_COUNT_1_BIT;
+        depthAttachment.samples = msaaSamples_;
         depthAttachment.loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR;
         depthAttachment.storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
         depthAttachment.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
@@ -745,11 +860,26 @@ namespace Projector
         depthAttachmentRef.attachment = 1;
         depthAttachmentRef.layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL;
 
+        VkAttachmentDescription colorAttachmentResolve{};
+        colorAttachmentResolve.format = swapChainImageFormat_;
+        colorAttachmentResolve.samples = VK_SAMPLE_COUNT_1_BIT;
+        colorAttachmentResolve.loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachmentResolve.storeOp = VK_ATTACHMENT_STORE_OP_STORE;
+        colorAttachmentResolve.stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE;
+        colorAttachmentResolve.stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE;
+        colorAttachmentResolve.initialLayout = VK_IMAGE_LAYOUT_UNDEFINED;
+        colorAttachmentResolve.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+        VkAttachmentReference colorAttachmentResolveRef{};
+        colorAttachmentResolveRef.attachment = 2;
+        colorAttachmentResolveRef.layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL;
+
         VkSubpassDescription subpass{};
         subpass.pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS;
         subpass.colorAttachmentCount = 1;
         subpass.pColorAttachments = &colorAttachmentRef;
         subpass.pDepthStencilAttachment = &depthAttachmentRef;
+        subpass.pResolveAttachments = &colorAttachmentResolveRef;
 
         VkSubpassDependency dependency{};
         dependency.srcSubpass = VK_SUBPASS_EXTERNAL;
@@ -759,7 +889,7 @@ namespace Projector
         dependency.dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT;
         dependency.dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT;
 
-        std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, depthAttachment };
+        std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
         VkRenderPassCreateInfo renderPassInfo{};
         renderPassInfo.sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO;
         renderPassInfo.attachmentCount = static_cast<uint32_t>(attachments.size());
@@ -890,7 +1020,7 @@ namespace Projector
         VkPipelineMultisampleStateCreateInfo multisampling{};
         multisampling.sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO;
         multisampling.sampleShadingEnable = VK_FALSE;
-        multisampling.rasterizationSamples = VK_SAMPLE_COUNT_1_BIT;
+        multisampling.rasterizationSamples = msaaSamples_;
         multisampling.minSampleShading = 1.0f; // Optional
         multisampling.pSampleMask = nullptr; // Optional
         multisampling.alphaToCoverageEnable = VK_FALSE; // Optional
@@ -961,8 +1091,6 @@ namespace Projector
         pipelineInfo.basePipelineHandle = VK_NULL_HANDLE; // Optional
         pipelineInfo.basePipelineIndex = -1; // Optional
 
-
-
         VkResult result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline_);
         if (result != VK_SUCCESS)
         {
@@ -988,21 +1116,30 @@ namespace Projector
         }
     }
 
+    void Projector::CreateColorResources()
+    {
+        VkFormat colorFormat = swapChainImageFormat_;
+        CreateImage(swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
+        colorImageView_ = CreateImageView(colorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+    }
+
     void Projector::CreateDepthResources()
     {
         VkFormat depthFormat = FindDepthFormat();
-        CreateImage(swapChainExtent_.width, swapChainExtent_.height, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
-        depthImageView_ = CreateImageView(depthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT);
+        CreateImage(swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
+        depthImageView_ = CreateImageView(depthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
     }
 
     void Projector::CreateFramebuffers()
     {
         swapChainFramebuffers_.resize(swapChainImageViews_.size());
-        for (size_t i = 0; i < swapChainImageViews_.size(); i++) {
-            std::array<VkImageView, 2> attachments =
+        for (size_t i = 0; i < swapChainImageViews_.size(); i++)
+        {
+            std::array<VkImageView, 3> attachments =
             {
+                colorImageView_,
+                depthImageView_,
                 swapChainImageViews_[i],
-                depthImageView_
             };
 
             VkFramebufferCreateInfo framebufferInfo{};
@@ -1095,6 +1232,8 @@ namespace Projector
             throw std::runtime_error("failed to load texture image!");
         }
 
+        mipLevels_ = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
+
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
 
@@ -1106,19 +1245,21 @@ namespace Projector
         vkUnmapMemory(device_, stagingBufferMemory);
 
         stbi_image_free(pixels);
-        CreateImage(texWidth, texHeight, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage_, textureImageMemory_);
+        CreateImage(texWidth, texHeight, mipLevels_, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage_, textureImageMemory_);
     
-        TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL);
+        TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels_);
         CopyBufferToImage(stagingBuffer, textureImage_, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-        TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL);
-    
+
         vkDestroyBuffer(device_, stagingBuffer, nullptr);
         vkFreeMemory(device_, stagingBufferMemory, nullptr);
+
+        //TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels_);
+        GenerateMipmaps(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels_);
     }
 
     void Projector::CreateTextureImageView()
     {
-        textureImageView_ = CreateImageView(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT);
+        textureImageView_ = CreateImageView(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels_);
     }
 
     void Projector::CreateTextureSampler()
@@ -1140,9 +1281,9 @@ namespace Projector
         samplerInfo.compareEnable = VK_FALSE;
         samplerInfo.compareOp = VK_COMPARE_OP_ALWAYS;
         samplerInfo.mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR;
-        samplerInfo.mipLodBias = 0.0f;
-        samplerInfo.minLod = 0.0f;
-        samplerInfo.maxLod = 0.0f;
+        samplerInfo.minLod = 0; // Optional
+        samplerInfo.maxLod = static_cast<float>(mipLevels_);
+        samplerInfo.mipLodBias = 0.0f; // Optional
 
         if (vkCreateSampler(device_, &samplerInfo, nullptr, &textureSampler_) != VK_SUCCESS)
         {
@@ -1489,12 +1630,17 @@ namespace Projector
 
         CreateSwapChain();
         CreateImageViews();
+        CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
     }
 
     void Projector::CleanupSwapChain()
     {
+        vkDestroyImageView(device_, colorImageView_, nullptr);
+        vkDestroyImage(device_, colorImage_, nullptr);
+        vkFreeMemory(device_, colorImageMemory_, nullptr);
+
         vkDestroyImageView(device_, depthImageView_, nullptr);
         vkDestroyImage(device_, depthImage_, nullptr);
         vkFreeMemory(device_, depthImageMemory_, nullptr);
