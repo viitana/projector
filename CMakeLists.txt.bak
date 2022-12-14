@@ -16,18 +16,7 @@ target_sources(projector
         Util.hpp
 )
 add_subdirectory(shaders)
-# target_include_directories(projector INTERFACE lib)
-
-add_library(stbi INTERFACE)
-target_include_directories(stbi INTERFACE lib/stb_image)
-target_link_libraries(projector PRIVATE stbi)
-
-add_library(tinyobjloader INTERFACE)
-target_link_libraries(projector PRIVATE tinyobjloader)
-target_include_directories(tinyobjloader INTERFACE lib/tiny_obj_loader)
-
-add_library(project INTERFACE)
-target_include_directories(project INTERFACE .)
+target_include_directories(projector INTERFACE lib)
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT projector)
 

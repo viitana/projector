@@ -29,8 +29,6 @@
 #define STB_IMAGE_STATIC
 #include <stb_image.h>
 
-
-
 #include "config.hpp"
 #include "util.hpp"
 
@@ -57,8 +55,6 @@ namespace Projector
 		{
 			return pos == other.pos && color == other.color && texCoord == other.texCoord;
 		}
-
-
 	};
 
 	struct QueueFamilyIndices
@@ -109,7 +105,7 @@ namespace Projector
 		void CopyBufferToImage(VkBuffer buffer, VkImage image, uint32_t width, uint32_t height) const;
 		const VkImageView CreateImageView(VkImage image, VkFormat format, VkImageAspectFlags aspectFlags, uint32_t mipLevels) const;
 		const VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) const;
-		const VkFormat Projector::FindDepthFormat() const;
+		const VkFormat FindDepthFormat() const;
 		const bool HasStencilComponent(VkFormat format) const;
 		void GenerateMipmaps(VkImage image, VkFormat imageFormat, int32_t texWidth, int32_t texHeight, uint32_t mipLevels) const;
 		const VkSampleCountFlagBits GetMaxUsableSampleCount() const;
