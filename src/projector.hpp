@@ -3,6 +3,7 @@
 #include <array>
 #include <iostream>
 #include <optional>
+#include <memory>
 #include <set>
 #include <string>
 #include <vector>
@@ -26,51 +27,13 @@
 #include <glm/gtx/hash.hpp>
 
 #include "config.hpp"
+#include "object.hpp"
 #include "util.hpp"
 
 namespace Projector
 {
-	const int MAX_FRAMES_IN_FLIGHT = 2;
-
 	const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 	const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
-
-	struct Model
-	{
-		std::string modelPath;
-		std::string texturePath;
-	};
-
-	const std::vector<Model> MODELS =
-	{
-		{
-			.modelPath = "../res/cruiser.obj",
-			.texturePath = "../res/cruiser.bmp",
-		},
-		{
-			.modelPath = "../res/viking_room.obj",
-			.texturePath = "../res/viking_room.png",
-		},
-		{
-			.modelPath = "../res/f16.obj",
-			.texturePath = "../res/F16s.bmp",
-		},
-	};
-
-	struct Vertex
-	{
-		glm::vec3 pos;
-		glm::vec3 color;
-		glm::vec2 texCoord;
-
-		const static VkVertexInputBindingDescription GetBindingDescription();
-		const static std::array<VkVertexInputAttributeDescription, 3> GetAttributeDescriptions();
-
-		bool operator==(const Vertex& other) const
-		{
-			return pos == other.pos && color == other.color && texCoord == other.texCoord;
-		}
-	};
 
 	struct QueueFamilyIndices
 	{
@@ -87,13 +50,6 @@ namespace Projector
 		std::vector<VkPresentModeKHR> presentModes;
 	};
 
-	struct UniformBufferObject
-	{
-		alignas(16) glm::mat4 model;
-		alignas(16) glm::mat4 view;
-		alignas(16) glm::mat4 proj;
-	};
-
 	class Projector
 	{
 	public:
@@ -102,7 +58,7 @@ namespace Projector
 
 		void Run();
 
-		void LoadObj(const Model model);
+		void LoadObj(const Rendering::Model model);
 
 		void Resized();
 	private:
@@ -144,15 +100,8 @@ namespace Projector
 		void CreateColorResources();
 		void CreateDepthResources();
 		void CreateFramebuffers();
-		void CreateTextureImage(const std::string& file);
-		void CreateTextureImageView();
 		void CreateTextureSampler();
-		void LoadModel(const std::string& file);
-		void CreateVertexBuffer();
-		void CreateIndexBuffer();
 		void CreateUniformBuffers();
-		void CreateDescriptorPool();
-		void CreateDescriptorSets();
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
 
@@ -200,8 +149,6 @@ namespace Projector
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
 		VkDescriptorSetLayout descriptorSetLayout_;
-		VkDescriptorPool descriptorPool_;
-		std::vector<VkDescriptorSet> descriptorSets_;
 		VkPipelineLayout pipelineLayout_;
 		VkPipeline graphicsPipeline_;
 
@@ -213,43 +160,26 @@ namespace Projector
 		std::vector<VkFence> inFlightFences_;
 		uint32_t currentFrame_ = 0;
 
-		// Vertex, index & uniform buffer
-		VkBuffer vertexBuffer_;
-		VkDeviceMemory vertexBufferMemory_;
-		VkBuffer indexBuffer_;
-		VkDeviceMemory indexBufferMemory_;
+		// Global uniform buffer(s)
 		std::vector<VkBuffer> uniformBuffers_;
 		std::vector<VkDeviceMemory> uniformBuffersMemory_;
 		std::vector<void*> uniformBuffersMapped_;
 
 		// Vertex data
-		std::vector<Vertex> vertices_;
+		std::vector<Rendering::Vertex> vertices_;
 		std::vector<uint32_t> indices_;
 
 		// Texture data
 		uint32_t mipLevels_;
-		VkImage textureImage_;
-		VkDeviceMemory textureImageMemory_;
-		VkImageView textureImageView_;
 		VkSampler textureSampler_;
+
+		// Objects
+		std::vector<std::unique_ptr<Rendering::Object>> objects_;
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
 
 		// Misc
-		uint16_t modelIndex_ = 0;
-	};
-}
-
-namespace std
-{
-	template<> struct hash<Projector::Vertex>
-	{
-		size_t operator()(Projector::Vertex const& vertex) const
-		{
-			return ((hash<glm::vec3>()(vertex.pos) ^
-				(hash<glm::vec3>()(vertex.color) << 1)) >> 1) ^
-				(hash<glm::vec2>()(vertex.texCoord) << 1);
-		}
+		uint16_t objectIndex_ = 0;
 	};
 }

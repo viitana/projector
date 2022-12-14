@@ -1,8 +1,5 @@
 #include "projector.hpp"
 
-#define TINYOBJLOADER_IMPLEMENTATION
-#include <tiny_obj_loader.h>
-
 #define STB_IMAGE_IMPLEMENTATION
 #define STB_IMAGE_STATIC
 #include <stb_image.h>
@@ -29,32 +26,50 @@ namespace Projector
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
-        CreateTextureImage(MODELS[modelIndex_].texturePath);
-        CreateTextureImageView();
         CreateTextureSampler();
-        LoadModel(MODELS[modelIndex_].modelPath);
-        CreateVertexBuffer();
-        CreateIndexBuffer();
         CreateUniformBuffers();
-        CreateDescriptorPool();
-        CreateDescriptorSets();
         CreateCommandBuffers();
         CreateSyncObjects();
+        
+        //objects_.resize(Rendering::MODELS.size());
+        //for (int i = 0; i < Rendering::MODELS.size(); i++)
+        //{
+        //    objects_[i] = std::move(Rendering::Object(
+        //        Rendering::MODELS[i],
+        //        physicalDevice_,
+        //        device_,
+        //        uniformBuffers_,
+        //        descriptorSetLayout_,
+        //        textureSampler_,
+        //        commandPool_,
+        //        graphicsQueue_
+        //    ));
+        //}
+
+        for (const Rendering::Model& model : Rendering::MODELS)
+        {
+            std::unique_ptr<Rendering::Object> obj = std::make_unique<Rendering::Object>(
+                model,
+                physicalDevice_,
+                device_,
+                uniformBuffers_,
+                descriptorSetLayout_,
+                textureSampler_,
+                commandPool_,
+                graphicsQueue_
+            );
+            objects_.push_back(std::move(obj));
+        }
     }
 
     Projector::~Projector()
     {
         CleanupSwapChain();
 
-        vkDestroySampler(device_, textureSampler_, nullptr);
-        vkDestroyImageView(device_, textureImageView_, nullptr);
-        vkDestroyImage(device_, textureImage_, nullptr);
-        vkFreeMemory(device_, textureImageMemory_, nullptr);
+        // Clear objects
+        objects_.clear();
 
-        vkDestroyBuffer(device_, indexBuffer_, nullptr);
-        vkFreeMemory(device_, indexBufferMemory_, nullptr);
-        vkDestroyBuffer(device_, vertexBuffer_, nullptr);
-        vkFreeMemory(device_, vertexBufferMemory_, nullptr);
+        vkDestroySampler(device_, textureSampler_, nullptr);
 
         vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
@@ -63,9 +78,8 @@ namespace Projector
             vkDestroyBuffer(device_, uniformBuffers_[i], nullptr);
             vkFreeMemory(device_, uniformBuffersMemory_[i], nullptr);
         }
-        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
-        vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
 
+        vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -105,35 +119,11 @@ namespace Projector
                 changed = true;
                 startTime = std::chrono::high_resolution_clock::now();
 
-                modelIndex_ = (modelIndex_ + 1) % MODELS.size();
-                LoadObj(MODELS[modelIndex_]);
+                objectIndex_ = (objectIndex_ + 1) % objects_.size();
+                //LoadObj(Rendering::MODELS[modelIndex_]);
             }
         }
         vkDeviceWaitIdle(device_);
-    }
-
-    void Projector::LoadObj(const Model model)
-    {
-        vkDeviceWaitIdle(device_);
-
-        vkDestroyImageView(device_, textureImageView_, nullptr);
-        vkDestroyImage(device_, textureImage_, nullptr);
-        vkFreeMemory(device_, textureImageMemory_, nullptr);
-
-        vkDestroyBuffer(device_, indexBuffer_, nullptr);
-        vkFreeMemory(device_, indexBufferMemory_, nullptr);
-        vkDestroyBuffer(device_, vertexBuffer_, nullptr);
-        vkFreeMemory(device_, vertexBufferMemory_, nullptr);
-
-        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
-
-        CreateTextureImage(model.texturePath);
-        CreateTextureImageView();
-        LoadModel(model.modelPath);
-        CreateVertexBuffer();
-        CreateIndexBuffer();
-        CreateDescriptorPool();
-        CreateDescriptorSets();
     }
 
     void Projector::Resized()
@@ -1084,8 +1074,8 @@ namespace Projector
         };
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
 
-        auto bindingDescription = Vertex::GetBindingDescription();
-        auto attributeDescriptions = Vertex::GetAttributeDescriptions();
+        auto bindingDescription = Rendering::Vertex::GetBindingDescription();
+        auto attributeDescriptions = Rendering::Vertex::GetAttributeDescriptions();
 
         VkPipelineVertexInputStateCreateInfo vertexInputInfo
         {
@@ -1288,115 +1278,6 @@ namespace Projector
         }
     }
 
-    void Projector::LoadModel(const std::string& file)
-    {
-        tinyobj::attrib_t attrib;
-        std::vector<tinyobj::shape_t> shapes;
-        std::vector<tinyobj::material_t> materials;
-        std::string warn, err;
-
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file.c_str()))
-        {
-            throw std::runtime_error(warn + err);
-        }
-
-        vertices_.clear();
-        indices_.clear();
-
-        std::unordered_map<Vertex, uint32_t> uniqueVertices{};
-
-        for (const auto& shape : shapes)
-        {
-            for (const auto& index : shape.mesh.indices)
-            {
-                Vertex vertex{};
-                vertex.pos =
-                {
-                    attrib.vertices[3 * index.vertex_index + 0],
-                    attrib.vertices[3 * index.vertex_index + 1],
-                    attrib.vertices[3 * index.vertex_index + 2]
-                };
-                vertex.texCoord =
-                {
-                    attrib.texcoords[2 * index.texcoord_index + 0],
-                    1.0f - attrib.texcoords[2 * index.texcoord_index + 1]
-                };
-                vertex.color = { 1.0f, 1.0f, 1.0f };
-
-                if (uniqueVertices.count(vertex) == 0)
-                {
-                    uniqueVertices[vertex] = static_cast<uint32_t>(vertices_.size());
-                    vertices_.push_back(vertex);
-                }
-                indices_.push_back(uniqueVertices[vertex]);
-            }
-        }
-    }
-
-    void Projector::CreateVertexBuffer()
-    {
-        VkDeviceSize bufferSize = sizeof(vertices_[0]) * vertices_.size();
-
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-        void* data;
-        vkMapMemory(device_, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, vertices_.data(), (size_t)bufferSize);
-        vkUnmapMemory(device_, stagingBufferMemory);
-
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer_, vertexBufferMemory_);
-
-        CopyBuffer(stagingBuffer, vertexBuffer_, bufferSize);
-
-        vkDestroyBuffer(device_, stagingBuffer, nullptr);
-        vkFreeMemory(device_, stagingBufferMemory, nullptr);
-    }
-
-    void Projector::CreateTextureImage(const std::string& file)
-    {
-        int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(file.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
-        VkDeviceSize imageSize = texWidth * texHeight * 4;
-
-        if (!pixels)
-        {
-            throw std::runtime_error("failed to load texture image!");
-        }
-
-        std::cout << "Loaded texture image '" << file << "' with dimensions " << texWidth  << 'x' << texHeight  << std::endl;
-
-        mipLevels_ = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
-
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-
-        CreateBuffer(imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-        void* data;
-        vkMapMemory(device_, stagingBufferMemory, 0, imageSize, 0, &data);
-        memcpy(data, pixels, static_cast<size_t>(imageSize));
-        vkUnmapMemory(device_, stagingBufferMemory);
-
-        stbi_image_free(pixels);
-        CreateImage(texWidth, texHeight, mipLevels_, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage_, textureImageMemory_);
-
-        TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels_);
-        CopyBufferToImage(stagingBuffer, textureImage_, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
-
-        vkDestroyBuffer(device_, stagingBuffer, nullptr);
-        vkFreeMemory(device_, stagingBufferMemory, nullptr);
-
-        //TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels_);
-        GenerateMipmaps(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels_);
-    }
-
-    void Projector::CreateTextureImageView()
-    {
-        textureImageView_ = CreateImageView(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels_);
-    }
-
     void Projector::CreateTextureSampler()
     {
         VkPhysicalDeviceProperties properties{};
@@ -1430,11 +1311,13 @@ namespace Projector
 
     const VkCommandBuffer Projector::BeginSingleTimeCommands() const
     {
-        VkCommandBufferAllocateInfo allocInfo{};
-        allocInfo.sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO;
-        allocInfo.level = VK_COMMAND_BUFFER_LEVEL_PRIMARY;
-        allocInfo.commandPool = commandPool_;
-        allocInfo.commandBufferCount = 1;
+        VkCommandBufferAllocateInfo allocInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+            .commandPool = commandPool_,
+            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+            .commandBufferCount = 1,
+        };
 
         VkCommandBuffer commandBuffer;
         vkAllocateCommandBuffers(device_, &allocInfo, &commandBuffer);
@@ -1467,30 +1350,9 @@ namespace Projector
         vkFreeCommandBuffers(device_, commandPool_, 1, &commandBuffer);
     }
 
-    void Projector::CreateIndexBuffer()
-    {
-        VkDeviceSize bufferSize = sizeof(indices_[0]) * indices_.size();
-
-        VkBuffer stagingBuffer;
-        VkDeviceMemory stagingBufferMemory;
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
-
-        void* data;
-        vkMapMemory(device_, stagingBufferMemory, 0, bufferSize, 0, &data);
-        memcpy(data, indices_.data(), (size_t)bufferSize);
-        vkUnmapMemory(device_, stagingBufferMemory);
-
-        CreateBuffer(bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer_, indexBufferMemory_);
-
-        CopyBuffer(stagingBuffer, indexBuffer_, bufferSize);
-
-        vkDestroyBuffer(device_, stagingBuffer, nullptr);
-        vkFreeMemory(device_, stagingBufferMemory, nullptr);
-    }
-
     void Projector::CreateUniformBuffers()
     {
-        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+        VkDeviceSize bufferSize = sizeof(Rendering::UniformBufferObject);
 
         uniformBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
         uniformBuffersMemory_.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1500,98 +1362,6 @@ namespace Projector
         {
             CreateBuffer(bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers_[i], uniformBuffersMemory_[i]);
             vkMapMemory(device_, uniformBuffersMemory_[i], 0, bufferSize, 0, &uniformBuffersMapped_[i]);
-        }
-    }
-
-    void Projector::CreateDescriptorPool()
-    {
-        std::array<VkDescriptorPoolSize, 2> poolSizes
-        {
-            VkDescriptorPoolSize
-            {
-                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
-            },
-            VkDescriptorPoolSize
-            {
-                .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
-            },
-        };
-
-        VkDescriptorPoolCreateInfo poolInfo
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
-            .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
-            .pPoolSizes = poolSizes.data(),
-        };
-
-        if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create descriptor pool!");
-        }
-    }
-
-    void Projector::CreateDescriptorSets()
-    {
-        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout_);
-
-        VkDescriptorSetAllocateInfo allocInfo
-        {
-            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
-            .descriptorPool = descriptorPool_,
-            .descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
-            .pSetLayouts = layouts.data(),
-        };
-
-        descriptorSets_.resize(MAX_FRAMES_IN_FLIGHT);
-        if (vkAllocateDescriptorSets(device_, &allocInfo, descriptorSets_.data()) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to allocate descriptor sets!");
-        }
-
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-        {
-            VkDescriptorBufferInfo bufferInfo
-            {
-                .buffer = uniformBuffers_[i],
-                .offset = 0,
-                .range = sizeof(UniformBufferObject),
-            };
-
-            VkDescriptorImageInfo imageInfo
-            {
-                .sampler = textureSampler_,
-                .imageView = textureImageView_,
-                .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            };
-
-            std::array<VkWriteDescriptorSet, 2> descriptorWrites
-            {
-                VkWriteDescriptorSet
-                {
-                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .dstSet = descriptorSets_[i],
-                    .dstBinding = 0,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                    .pBufferInfo = &bufferInfo,
-                },
-                VkWriteDescriptorSet
-                {
-                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
-                    .dstSet = descriptorSets_[i],
-                    .dstBinding = 1,
-                    .dstArrayElement = 0,
-                    .descriptorCount = 1,
-                    .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                    .pImageInfo = &imageInfo,
-                },
-            };
-
-            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -1648,7 +1418,7 @@ namespace Projector
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo
+        Rendering::UniformBufferObject ubo
         {
             .model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
             .view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
@@ -1788,14 +1558,14 @@ namespace Projector
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        VkBuffer vertexBuffers[] = { vertexBuffer_ };
+        VkBuffer vertexBuffers[] = { objects_[objectIndex_]->GetVertexBuffer() };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        vkCmdBindIndexBuffer(commandBuffer, indexBuffer_, 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, &descriptorSets_[currentFrame_], 0, nullptr);
+        vkCmdBindIndexBuffer(commandBuffer, objects_[objectIndex_]->GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, objects_[objectIndex_]->GetDescriptorSet(currentFrame_), 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, static_cast<uint32_t>(indices_.size()), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, objects_[objectIndex_]->GetIndicesCount(), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
 
@@ -1850,46 +1620,6 @@ namespace Projector
     {
         auto app = reinterpret_cast<Projector*>(glfwGetWindowUserPointer(window));
         app->Resized();
-    }
-
-    const VkVertexInputBindingDescription Vertex::GetBindingDescription()
-    {
-        VkVertexInputBindingDescription bindingDescription
-        {
-            .binding = 0,
-            .stride = sizeof(Vertex),
-            .inputRate = VK_VERTEX_INPUT_RATE_VERTEX,
-        };
-        return bindingDescription;
-    }
-
-    const std::array<VkVertexInputAttributeDescription, 3> Vertex::GetAttributeDescriptions()
-    {
-        std::array<VkVertexInputAttributeDescription, 3> attributeDescriptions
-        {
-            VkVertexInputAttributeDescription
-            {
-                .location = 0,
-                .binding = 0,
-                .format = VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = offsetof(Vertex, pos),
-            },
-            VkVertexInputAttributeDescription
-            {
-                .location = 1,
-                .binding = 0,
-                .format = VK_FORMAT_R32G32B32_SFLOAT,
-                .offset = offsetof(Vertex, color),
-            },
-            VkVertexInputAttributeDescription
-            {
-                .location = 2,
-                .binding = 0,
-                .format = VK_FORMAT_R32G32_SFLOAT,
-                .offset = offsetof(Vertex, texCoord),
-            },
-        };
-        return attributeDescriptions;
     }
 
     const bool QueueFamilyIndices::IsComplete() const

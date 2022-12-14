@@ -2,8 +2,6 @@
 
 #include "projector.hpp"
 
-const int MAX_FRAMES_IN_FLIGHT = 2;
-
 int main(int argc, char* argv[])
 {
     try
