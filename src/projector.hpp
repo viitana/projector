@@ -25,10 +25,6 @@
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_STATIC
-#include <stb_image.h>
-
 #include "config.hpp"
 #include "util.hpp"
 
@@ -39,8 +35,27 @@ namespace Projector
 	const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 	const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-	const std::string MODEL_PATH = "../res/viking_room.obj";
-	const std::string TEXTURE_PATH = "../res/viking_room.png";
+	struct Model
+	{
+		std::string modelPath;
+		std::string texturePath;
+	};
+
+	const std::vector<Model> MODELS =
+	{
+		{
+			.modelPath = "../res/cruiser.obj",
+			.texturePath = "../res/cruiser.bmp",
+		},
+		{
+			.modelPath = "../res/viking_room.obj",
+			.texturePath = "../res/viking_room.png",
+		},
+		{
+			.modelPath = "../res/f16.obj",
+			.texturePath = "../res/F16s.bmp",
+		},
+	};
 
 	struct Vertex
 	{
@@ -86,6 +101,9 @@ namespace Projector
 		~Projector();
 
 		void Run();
+
+		void LoadObj(const Model model);
+
 		void Resized();
 	private:
 		const bool CheckValidationLayerSupport() const;
@@ -126,10 +144,10 @@ namespace Projector
 		void CreateColorResources();
 		void CreateDepthResources();
 		void CreateFramebuffers();
-		void CreateTextureImage();
+		void CreateTextureImage(const std::string& file);
 		void CreateTextureImageView();
 		void CreateTextureSampler();
-		void LoadModel();
+		void LoadModel(const std::string& file);
 		void CreateVertexBuffer();
 		void CreateIndexBuffer();
 		void CreateUniformBuffers();
@@ -217,6 +235,9 @@ namespace Projector
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
+
+		// Misc
+		uint16_t modelIndex_ = 0;
 	};
 }
 

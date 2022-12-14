@@ -1,14 +1,16 @@
-#include "Projector.hpp"
+#include "projector.hpp"
 
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
+#define STB_IMAGE_IMPLEMENTATION
+#define STB_IMAGE_STATIC
+#include <stb_image.h>
+
 namespace Projector
 {
-	
-
-	Projector::Projector()
-	{
+    Projector::Projector()
+    {
         if (!glfwInit())
         {
             throw std::runtime_error("failed to initialize glfw!");
@@ -27,10 +29,10 @@ namespace Projector
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
-        CreateTextureImage();
+        CreateTextureImage(MODELS[modelIndex_].texturePath);
         CreateTextureImageView();
         CreateTextureSampler();
-        LoadModel();
+        LoadModel(MODELS[modelIndex_].modelPath);
         CreateVertexBuffer();
         CreateIndexBuffer();
         CreateUniformBuffers();
@@ -38,7 +40,7 @@ namespace Projector
         CreateDescriptorSets();
         CreateCommandBuffers();
         CreateSyncObjects();
-	}
+    }
 
     Projector::~Projector()
     {
@@ -87,16 +89,55 @@ namespace Projector
 
     void Projector::Run()
     {
+        static auto startTime = std::chrono::high_resolution_clock::now();
+        static bool changed = false;
+
         while (!glfwWindowShouldClose(window_))
         {
             glfwPollEvents();
             DrawFrame();
+
+            auto currentTime = std::chrono::high_resolution_clock::now();
+            float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+
+            if (!false && time > 2.5f)
+            {
+                changed = true;
+                startTime = std::chrono::high_resolution_clock::now();
+
+                modelIndex_ = (modelIndex_ + 1) % MODELS.size();
+                LoadObj(MODELS[modelIndex_]);
+            }
         }
         vkDeviceWaitIdle(device_);
     }
 
+    void Projector::LoadObj(const Model model)
+    {
+        vkDeviceWaitIdle(device_);
+
+        vkDestroyImageView(device_, textureImageView_, nullptr);
+        vkDestroyImage(device_, textureImage_, nullptr);
+        vkFreeMemory(device_, textureImageMemory_, nullptr);
+
+        vkDestroyBuffer(device_, indexBuffer_, nullptr);
+        vkFreeMemory(device_, indexBufferMemory_, nullptr);
+        vkDestroyBuffer(device_, vertexBuffer_, nullptr);
+        vkFreeMemory(device_, vertexBufferMemory_, nullptr);
+
+        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
+
+        CreateTextureImage(model.texturePath);
+        CreateTextureImageView();
+        LoadModel(model.modelPath);
+        CreateVertexBuffer();
+        CreateIndexBuffer();
+        CreateDescriptorPool();
+        CreateDescriptorSets();
+    }
+
     void Projector::Resized()
-    {   
+    {
         framebufferResized_ = true;
     }
 
@@ -834,7 +875,7 @@ namespace Projector
 
         VkSharingMode imageSharingMode;
         uint32_t queueFamilyIndexCount;
-        uint32_t *queueFamilyIndices;
+        uint32_t* queueFamilyIndices;
 
         QueueFamilyIndices familyIndices = FindQueueFamilies(physicalDevice_);
         uint32_t families[2] = { familyIndices.graphicsFamily.value(), familyIndices.presentFamily.value() };
@@ -1247,17 +1288,20 @@ namespace Projector
         }
     }
 
-    void Projector::LoadModel()
+    void Projector::LoadModel(const std::string& file)
     {
         tinyobj::attrib_t attrib;
         std::vector<tinyobj::shape_t> shapes;
         std::vector<tinyobj::material_t> materials;
         std::string warn, err;
 
-        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, MODEL_PATH.c_str()))
+        if (!tinyobj::LoadObj(&attrib, &shapes, &materials, &warn, &err, file.c_str()))
         {
             throw std::runtime_error(warn + err);
         }
+
+        vertices_.clear();
+        indices_.clear();
 
         std::unordered_map<Vertex, uint32_t> uniqueVertices{};
 
@@ -1310,16 +1354,18 @@ namespace Projector
         vkFreeMemory(device_, stagingBufferMemory, nullptr);
     }
 
-    void Projector::CreateTextureImage()
+    void Projector::CreateTextureImage(const std::string& file)
     {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        stbi_uc* pixels = stbi_load(file.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels)
         {
             throw std::runtime_error("failed to load texture image!");
         }
+
+        std::cout << "Loaded texture image '" << file << "' with dimensions " << texWidth  << 'x' << texHeight  << std::endl;
 
         mipLevels_ = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
@@ -1335,7 +1381,7 @@ namespace Projector
 
         stbi_image_free(pixels);
         CreateImage(texWidth, texHeight, mipLevels_, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage_, textureImageMemory_);
-    
+
         TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels_);
         CopyBufferToImage(stagingBuffer, textureImage_, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
