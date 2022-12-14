@@ -1,6 +1,8 @@
 #include "util.hpp"
 
+#include <filesystem>
 #include <fstream>
+#include <iostream>
 
 namespace Util
 {
@@ -22,4 +24,12 @@ namespace Util
 
         return buffer;
 	}
+
+    void ListDirectoryFiles(const std::string& directory)
+    {
+        for (const auto& entry : std::filesystem::directory_iterator(directory))
+        {
+            std::cout << entry.path() << std::endl;
+        }
+    }
 }

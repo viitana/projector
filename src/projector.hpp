@@ -39,8 +39,8 @@ namespace Projector
 	const std::vector<const char*> validationLayers = { "VK_LAYER_KHRONOS_validation" };
 	const std::vector<const char*> deviceExtensions = { VK_KHR_SWAPCHAIN_EXTENSION_NAME };
 
-	const std::string MODEL_PATH = "res/viking_room.obj";
-	const std::string TEXTURE_PATH = "res/viking_room.png";
+	const std::string MODEL_PATH = "../res/viking_room.obj";
+	const std::string TEXTURE_PATH = "../res/viking_room.png";
 
 	struct Vertex
 	{

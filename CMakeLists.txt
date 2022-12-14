@@ -2,21 +2,10 @@ cmake_minimum_required(VERSION 3.25)
 list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 project(projector VERSION 0.1)
-add_executable(projector main.cpp)
 
-configure_file(config.hpp.in config.hpp)
+configure_file(config.hpp.in src/config.hpp)
 
-target_sources(projector
-    PRIVATE
-        main.cpp
-        Projector.cpp
-        Projector.hpp
-        config.hpp
-        Util.cpp
-        Util.hpp
-)
-add_subdirectory(shaders)
-# target_include_directories(projector INTERFACE lib)
+add_subdirectory(src)
 
 add_library(stbi INTERFACE)
 target_include_directories(stbi INTERFACE lib/stb_image)

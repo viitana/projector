@@ -1021,8 +1021,8 @@ namespace Projector
 
     void Projector::CreateGraphicsPipeline()
     {
-        std::vector<char> vertShaderCode = Util::ReadFile("shaders/vert.spv");
-        std::vector<char> fragShaderCode = Util::ReadFile("shaders/frag.spv");
+        std::vector<char> vertShaderCode = Util::ReadFile("./shaders/vert.spv");
+        std::vector<char> fragShaderCode = Util::ReadFile("./shaders/frag.spv");
 
         VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
         VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
