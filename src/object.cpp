@@ -16,46 +16,85 @@
 namespace Rendering
 {
     Object::Object(const Model& model, const VkPhysicalDevice& physicalDevice, const VkDevice& device, const std::vector<VkBuffer>& uniformBuffers, const VkDescriptorSetLayout& descriptorSetLayout, const VkSampler& textureSampler, const VkCommandPool& commandPool, const VkQueue& queue)
-        : model_(model),
-        physicalDevice_(physicalDevice),
-        device_(device),
-        uniformBuffers_(uniformBuffers),
-        descriptorSetLayout_(descriptorSetLayout),
-        textureSampler_(textureSampler),
-        commandPool_(commandPool),
-        queue_(queue)
+        : model_(model), device_(device)
     {
         std::cout << "Creating object based on '" << model.modelPath << "'" << std::endl;
 
         LoadModel();
-        CreateTextureImage();
+        CreateTextureImage(physicalDevice, commandPool, queue);
         CreateTextureImageView();
         CreateDescriptorPool();
-        CreateDescriptorSets();
-        CreateVertexBuffer();
-        CreateIndexBuffer();
+        CreateDescriptorSets(descriptorSetLayout, uniformBuffers, textureSampler);
+        CreateVertexBuffer(physicalDevice, commandPool, queue);
+        CreateIndexBuffer(physicalDevice, commandPool, queue);
     }
-
-    struct a
-    {
-        const int b;
-    };
 
     Object::~Object()
     {
-        std::cout << "Destroying object based on '" << model_.modelPath << "'" << std::endl;
+        Destroy();
+    }
 
-        vkDestroyImageView(device_, textureImageView_, nullptr);
-        vkDestroyImage(device_, textureImage_, nullptr);
-        vkFreeMemory(device_, textureImageMemory_, nullptr);
 
-        vkDestroyBuffer(device_, indexBuffer_, nullptr);
-        vkFreeMemory(device_, indexBufferMemory_, nullptr);
-        vkDestroyBuffer(device_, vertexBuffer_, nullptr);
-        vkFreeMemory(device_, vertexBufferMemory_, nullptr);
 
-        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
+    Object::Object(Object&& other) noexcept
+        : device_(std::exchange(other.device_, {}))
+        , model_(std::exchange(other.model_, {}))
+        , descriptorPool_(std::exchange(other.descriptorPool_, {}))
+        , descriptorSets_(std::exchange(other.descriptorSets_, {}))
+        , vertices_(std::exchange(other.vertices_, {}))
+        , indices_(std::exchange(other.indices_, {}))
+        , vertexBuffer_(std::exchange(other.vertexBuffer_, {}))
+        , vertexBufferMemory_(std::exchange(other.vertexBufferMemory_, {}))
+        , indexBuffer_(std::exchange(other.indexBuffer_, {}))
+        , indexBufferMemory_(std::exchange(other.indexBufferMemory_, {}))
+        , mipLevels_(std::exchange(other.mipLevels_, {}))
+        , textureImage_(std::exchange(other.textureImage_, {}))
+        , textureImageMemory_(std::exchange(other.textureImageMemory_, {}))
+        , textureImageView_(std::exchange(other.textureImageView_, {}))
+    {
+    }
 
+    Object& Object::operator=(Object&& other) noexcept
+    {
+        if (this != &other)
+        {
+            Destroy();
+
+            device_ = std::exchange(other.device_, {});
+            model_ = std::exchange(other.model_, {});
+            descriptorPool_ = std::exchange(other.descriptorPool_, {});
+            descriptorSets_ = std::exchange(other.descriptorSets_, {});
+            vertices_ = std::exchange(other.vertices_, {});
+            indices_ = std::exchange(other.indices_, {});
+            vertexBuffer_ = std::exchange(other.vertexBuffer_, {});
+            vertexBufferMemory_ = std::exchange(other.vertexBufferMemory_, {});
+            indexBuffer_ = std::exchange(other.indexBuffer_, {});
+            indexBufferMemory_ = std::exchange(other.indexBufferMemory_, {});
+            mipLevels_ = std::exchange(other.mipLevels_, {});
+            textureImage_ = std::exchange(other.textureImage_, {});
+            textureImageMemory_ = std::exchange(other.textureImageMemory_, {});
+            textureImageView_ = std::exchange(other.textureImageView_, {});
+        }
+        return *this;
+    }
+
+    void Object::Destroy()
+    {
+        if (device_ != VK_NULL_HANDLE)
+        {
+            std::cout << "Destroying object based on '" << model_.modelPath << "'" << std::endl;
+
+            vkDestroyImageView(device_, textureImageView_, nullptr);
+            vkDestroyImage(device_, textureImage_, nullptr);
+            vkFreeMemory(device_, textureImageMemory_, nullptr);
+
+            vkDestroyBuffer(device_, indexBuffer_, nullptr);
+            vkFreeMemory(device_, indexBufferMemory_, nullptr);
+            vkDestroyBuffer(device_, vertexBuffer_, nullptr);
+            vkFreeMemory(device_, vertexBufferMemory_, nullptr);
+
+            vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
+        }
     }
 
     void Object::LoadModel()
@@ -103,7 +142,7 @@ namespace Rendering
         }
     }
 
-    void Object::CreateTextureImage()
+    void Object::CreateTextureImage(const VkPhysicalDevice physicalDevice, const VkCommandPool commandPool, const VkQueue queue)
     {
         int texWidth, texHeight, texChannels;
         stbi_uc* pixels = stbi_load(model_.texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
@@ -121,7 +160,7 @@ namespace Rendering
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
 
-        Util::CreateBuffer(physicalDevice_, device_, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        Util::CreateBuffer(physicalDevice, device_, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
         void* data;
         vkMapMemory(device_, stagingBufferMemory, 0, imageSize, 0, &data);
@@ -129,16 +168,16 @@ namespace Rendering
         vkUnmapMemory(device_, stagingBufferMemory);
 
         stbi_image_free(pixels);
-        Util::CreateImage(physicalDevice_, device_, texWidth, texHeight, mipLevels_, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage_, textureImageMemory_);
+        Util::CreateImage(physicalDevice, device_, texWidth, texHeight, mipLevels_, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, textureImage_, textureImageMemory_);
 
-        Util::TransitionImageLayout(device_, commandPool_, queue_, textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels_);
-        Util::CopyBufferToImage(device_, commandPool_, queue_, stagingBuffer, textureImage_, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
+        Util::TransitionImageLayout(device_, commandPool, queue, textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels_);
+        Util::CopyBufferToImage(device_, commandPool, queue, stagingBuffer, textureImage_, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
         vkDestroyBuffer(device_, stagingBuffer, nullptr);
         vkFreeMemory(device_, stagingBufferMemory, nullptr);
 
         //TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels_);
-        Util::GenerateMipmaps(physicalDevice_, device_, commandPool_, queue_, textureImage_, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels_);
+        Util::GenerateMipmaps(physicalDevice, device_, commandPool, queue, textureImage_, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels_);
     }
 
     void Object::CreateTextureImageView()
@@ -176,9 +215,9 @@ namespace Rendering
         }
     }
 
-    void Object::CreateDescriptorSets()
+    void Object::CreateDescriptorSets(const VkDescriptorSetLayout descriptorSetLayout, const std::vector<VkBuffer>& uniformBuffers, const VkSampler textureSampler)
     {
-        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout_);
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout);
 
         VkDescriptorSetAllocateInfo allocInfo
         {
@@ -198,14 +237,14 @@ namespace Rendering
         {
             VkDescriptorBufferInfo bufferInfo
             {
-                .buffer = uniformBuffers_[i],
+                .buffer = uniformBuffers[i],
                 .offset = 0,
                 .range = sizeof(UniformBufferObject),
             };
 
             VkDescriptorImageInfo imageInfo
             {
-                .sampler = textureSampler_,
+                .sampler = textureSampler,
                 .imageView = textureImageView_,
                 .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
@@ -238,41 +277,41 @@ namespace Rendering
         }
     }
 
-    void Object::CreateVertexBuffer()
+    void Object::CreateVertexBuffer(const VkPhysicalDevice physicalDevice, const VkCommandPool commandPool, const VkQueue queue)
     {
         VkDeviceSize bufferSize = sizeof(vertices_[0]) * vertices_.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        Util::CreateBuffer(physicalDevice, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
         void* data;
         vkMapMemory(device_, stagingBufferMemory, 0, bufferSize, 0, &data);
         memcpy(data, vertices_.data(), (size_t)bufferSize);
         vkUnmapMemory(device_, stagingBufferMemory);
 
-        Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer_, vertexBufferMemory_);
-        Util::CopyBuffer(device_, commandPool_, queue_, stagingBuffer, vertexBuffer_, bufferSize);
+        Util::CreateBuffer(physicalDevice, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_VERTEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, vertexBuffer_, vertexBufferMemory_);
+        Util::CopyBuffer(device_, commandPool, queue, stagingBuffer, vertexBuffer_, bufferSize);
 
         vkDestroyBuffer(device_, stagingBuffer, nullptr);
         vkFreeMemory(device_, stagingBufferMemory, nullptr);
     }
 
-    void Object::CreateIndexBuffer()
+    void Object::CreateIndexBuffer(const VkPhysicalDevice physicalDevice, const VkCommandPool commandPool, const VkQueue queue)
     {
         VkDeviceSize bufferSize = sizeof(indices_[0]) * indices_.size();
 
         VkBuffer stagingBuffer;
         VkDeviceMemory stagingBufferMemory;
-        Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+        Util::CreateBuffer(physicalDevice, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
         void* data;
         vkMapMemory(device_, stagingBufferMemory, 0, bufferSize, 0, &data);
         memcpy(data, indices_.data(), (size_t)bufferSize);
         vkUnmapMemory(device_, stagingBufferMemory);
 
-        Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer_, indexBufferMemory_);
-        Util::CopyBuffer(device_, commandPool_, queue_, stagingBuffer, indexBuffer_, bufferSize);
+        Util::CreateBuffer(physicalDevice, device_, bufferSize, VK_BUFFER_USAGE_TRANSFER_DST_BIT | VK_BUFFER_USAGE_INDEX_BUFFER_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, indexBuffer_, indexBufferMemory_);
+        Util::CopyBuffer(device_, commandPool, queue, stagingBuffer, indexBuffer_, bufferSize);
 
         vkDestroyBuffer(device_, stagingBuffer, nullptr);
         vkFreeMemory(device_, stagingBufferMemory, nullptr);

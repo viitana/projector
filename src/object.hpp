@@ -58,11 +58,10 @@ namespace Rendering
 		Object(const Model& model, const VkPhysicalDevice& physicalDevice, const VkDevice& device, const std::vector<VkBuffer>& uniformBuffers, const VkDescriptorSetLayout& descriptorSetLayout, const VkSampler& textureSampler, const VkCommandPool& commandPool, const VkQueue& queue);
 		~Object();
 
-		Object& operator=(Object&& other)
-		{
-
-			return *this;
-		}
+		Object(const Object& o) = delete;
+		Object(Object&& other) noexcept;
+		Object& operator=(Object other) = delete;
+		Object& operator=(Object&& other) noexcept;
 
 		const VkBuffer& GetVertexBuffer() const { return vertexBuffer_; }
 		const VkBuffer& GetIndexBuffer() const { return indexBuffer_; }
@@ -70,30 +69,23 @@ namespace Rendering
 		const uint32_t GetIndicesCount() const { return indices_.size(); }
 
 	private:
+		void Destroy();
+
 		void LoadModel();
-		void CreateTextureImage();
+		void CreateTextureImage(const VkPhysicalDevice physicalDevice, const VkCommandPool commandPool, const VkQueue queue);
 		void CreateTextureImageView();
 		void CreateDescriptorPool();
-		void CreateDescriptorSets();
-		void CreateVertexBuffer();
-		void CreateIndexBuffer();
+		void CreateDescriptorSets(const VkDescriptorSetLayout descriptorSetLayout, const std::vector<VkBuffer>& uniformBuffers, const VkSampler textureSampler);
+		void CreateVertexBuffer(const VkPhysicalDevice physicalDevice, const VkCommandPool commandPool, const VkQueue queue);
+		void CreateIndexBuffer(const VkPhysicalDevice physicalDevice, const VkCommandPool commandPool, const VkQueue queue);
 
+		// Vulkan device
+		VkDevice device_;
+		
 		// Base model info
-		const Model model_;
-
-		// Device
-		const VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
-		const VkDevice device_ = VK_NULL_HANDLE;
-
-		// Command pool & queue
-		const VkCommandPool commandPool_;
-		const VkQueue queue_;
-
-		// Uniform buffers
-		const std::vector<VkBuffer> uniformBuffers_;
+		Model model_;
 
 		// Descriptor sets
-		const VkDescriptorSetLayout descriptorSetLayout_;
 		VkDescriptorPool descriptorPool_;
 		std::vector<VkDescriptorSet> descriptorSets_;
 
@@ -112,7 +104,6 @@ namespace Rendering
 		VkImage textureImage_;
 		VkDeviceMemory textureImageMemory_;
 		VkImageView textureImageView_;
-		const VkSampler textureSampler_;
 	};
 
 	struct UniformBufferObject

@@ -30,25 +30,10 @@ namespace Projector
         CreateUniformBuffers();
         CreateCommandBuffers();
         CreateSyncObjects();
-        
-        //objects_.resize(Rendering::MODELS.size());
-        //for (int i = 0; i < Rendering::MODELS.size(); i++)
-        //{
-        //    objects_[i] = std::move(Rendering::Object(
-        //        Rendering::MODELS[i],
-        //        physicalDevice_,
-        //        device_,
-        //        uniformBuffers_,
-        //        descriptorSetLayout_,
-        //        textureSampler_,
-        //        commandPool_,
-        //        graphicsQueue_
-        //    ));
-        //}
 
         for (const Rendering::Model& model : Rendering::MODELS)
         {
-            std::unique_ptr<Rendering::Object> obj = std::make_unique<Rendering::Object>(
+            Rendering::Object obj = Rendering::Object(
                 model,
                 physicalDevice_,
                 device_,
@@ -1558,14 +1543,14 @@ namespace Projector
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        VkBuffer vertexBuffers[] = { objects_[objectIndex_]->GetVertexBuffer() };
+        VkBuffer vertexBuffers[] = { objects_[objectIndex_].GetVertexBuffer() };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        vkCmdBindIndexBuffer(commandBuffer, objects_[objectIndex_]->GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, objects_[objectIndex_]->GetDescriptorSet(currentFrame_), 0, nullptr);
+        vkCmdBindIndexBuffer(commandBuffer, objects_[objectIndex_].GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, objects_[objectIndex_].GetDescriptorSet(currentFrame_), 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, objects_[objectIndex_]->GetIndicesCount(), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, objects_[objectIndex_].GetIndicesCount(), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
 

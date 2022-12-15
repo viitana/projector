@@ -174,7 +174,7 @@ namespace Projector
 		VkSampler textureSampler_;
 
 		// Objects
-		std::vector<std::unique_ptr<Rendering::Object>> objects_;
+		std::vector<Rendering::Object> objects_;
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
