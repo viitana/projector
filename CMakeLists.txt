@@ -3,7 +3,7 @@ list(APPEND CMAKE_MODULE_PATH "${PROJECT_SOURCE_DIR}/cmake")
 
 project(projector VERSION 0.1)
 
-configure_file(config.hpp.in src/config.hpp)
+# configure_file(config.hpp.in src/config.hpp)
 
 add_subdirectory(src)
 
@@ -15,8 +15,12 @@ add_library(tinyobjloader INTERFACE)
 target_link_libraries(projector PRIVATE tinyobjloader)
 target_include_directories(tinyobjloader INTERFACE lib/tiny_obj_loader)
 
-add_library(project INTERFACE)
-target_include_directories(project INTERFACE .)
+add_library(tinygltf INTERFACE)
+target_link_libraries(projector PRIVATE tinygltf)
+target_include_directories(tinygltf INTERFACE lib/tiny_gltf)
+
+# add_library(project INTERFACE)
+# target_include_directories(project INTERFACE .)
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT projector)
 

@@ -34,8 +34,6 @@ namespace Rendering
         Destroy();
     }
 
-
-
     Object::Object(Object&& other) noexcept
         : device_(std::exchange(other.device_, {}))
         , model_(std::exchange(other.model_, {}))

@@ -8,5 +8,4 @@ target_sources(projector
         util.hpp
 )
 
-
 add_subdirectory(shaders)
