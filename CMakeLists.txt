@@ -19,8 +19,8 @@ add_library(tinygltf INTERFACE)
 target_link_libraries(projector PRIVATE tinygltf)
 target_include_directories(tinygltf INTERFACE lib/tiny_gltf)
 
-# add_library(project INTERFACE)
-# target_include_directories(project INTERFACE .)
+find_package(Ktx CONFIG REQUIRED)
+target_link_libraries(projector PRIVATE KTX::ktx)
 
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT projector)
 

@@ -6,8 +6,6 @@
 #define TINYOBJLOADER_IMPLEMENTATION
 #include <tiny_obj_loader.h>
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_STATIC
 #include <stb_image.h>
 
 #include "config.hpp"
@@ -39,7 +37,6 @@ namespace Rendering
         CreateVertexBuffer(physicalDevice, commandPool, queue);
         CreateIndexBuffer(physicalDevice, commandPool, queue);
     }
-
 
     Object::~Object()
     {

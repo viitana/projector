@@ -1,7 +1,5 @@
 #include "projector.hpp"
 
-#define STB_IMAGE_IMPLEMENTATION
-#define STB_IMAGE_STATIC
 #include <stb_image.h>
 
 #include "scene.hpp"
@@ -21,10 +19,21 @@ namespace Projector
         CreateLogicalDevice();
         CreateSwapChain();
         CreateImageViews();
+
+        CreateCommandPool();
+
+        scene_ = new Scene::Model(
+            "../res/sponza/Sponza.gltf",
+            physicalDevice_,
+            device_,
+            commandPool_,
+            graphicsQueue_,
+            1.0f
+        );
+
         CreateRenderPass();
         CreateDescriptorSetLayout();
         CreateGraphicsPipeline();
-        CreateCommandPool();
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
@@ -33,33 +42,35 @@ namespace Projector
         CreateCommandBuffers();
         CreateSyncObjects();
 
-        for (const Rendering::Model& model : Rendering::MODELS)
-        {
-            Rendering::Object obj = Rendering::Object(
-                model,
-                physicalDevice_,
-                device_,
-                uniformBuffers_,
-                descriptorSetLayout_,
-                textureSampler_,
-                commandPool_,
-                graphicsQueue_
-            );
-            objects_.push_back(std::move(obj));
-        }
+        //for (const Rendering::Model& model : Rendering::MODELS)
+        //{
+        //    Rendering::Object obj = Rendering::Object(
+        //        model,
+        //        physicalDevice_,
+        //        device_,
+        //        uniformBuffers_,
+        //        descriptorSetLayout_,
+        //        textureSampler_,
+        //        commandPool_,
+        //        graphicsQueue_
+        //    );
+        //    objects_.push_back(std::move(obj));
+        //}
 
-        auto scene = Scene::Scene(
-            "../res/sponza/Sponza.gltf",
-            physicalDevice_,
-            device_,
-            uniformBuffers_,
-            descriptorSetLayout_,
-            textureSampler_,
-            commandPool_,
-            graphicsQueue_
-        );
+        
 
-        scene_.emplace(std::move(scene));
+        //auto scene = Scene::Scene(
+        //    "../res/sponza/Sponza.gltf",
+        //    physicalDevice_,
+        //    device_,
+        //    uniformBuffers_,
+        //    descriptorSetLayout_,
+        //    textureSampler_,
+        //    commandPool_,
+        //    graphicsQueue_
+        //);
+
+        //scene_.emplace(std::move(scene));
     }
 
     Projector::~Projector()
@@ -67,7 +78,7 @@ namespace Projector
         CleanupSwapChain();
 
         // Clear objects
-        objects_.clear();
+        // objects_.clear();
 
         vkDestroySampler(device_, textureSampler_, nullptr);
 
@@ -119,7 +130,8 @@ namespace Projector
                 changed = true;
                 startTime = std::chrono::high_resolution_clock::now();
 
-                objectIndex_ = (objectIndex_ + 1) % scene_.value().ObjectCount();
+                //objectIndex_ = (objectIndex_ + 1) % scene_.value().ObjectCount();
+                // objectIndex_ = (objectIndex_ + 1) % objects_.size();
                 //LoadObj(Rendering::MODELS[modelIndex_]);
             }
         }
@@ -821,11 +833,16 @@ namespace Projector
             .blendConstants = { 0.0f, 0.0f, 0.0f, 0.0f }, // Optional
         };
 
+        const std::vector<VkDescriptorSetLayout> setLayouts = {
+            Scene::descriptorSetLayoutUbo,
+            Scene::descriptorSetLayoutImage,
+        };
+
         VkPipelineLayoutCreateInfo pipelineLayoutInfo
         {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
-            .setLayoutCount = 1,
-            .pSetLayouts = &descriptorSetLayout_,
+            .setLayoutCount = static_cast<uint32_t>(setLayouts.size()), //1,
+            .pSetLayouts = setLayouts.data(), //&descriptorSetLayout_,
             .pushConstantRangeCount = 0, // Optional
             .pPushConstantRanges = nullptr, // Optional
         };
@@ -855,7 +872,10 @@ namespace Projector
             .stageCount = 2,
             .pStages = shaderStages,
 
-            .pVertexInputState = &vertexInputInfo,
+            .pVertexInputState = Scene::Vertex::GetPipelineVertexInputState({
+                Scene::VertexComponent::Position,
+                Scene::VertexComponent::Normal,
+            }), //&vertexInputInfo,
             .pInputAssemblyState = &inputAssembly,
             .pViewportState = &viewportState,
             .pRasterizationState = &rasterizer,
@@ -957,7 +977,6 @@ namespace Projector
             .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
             .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .mipLodBias = 0.0f, // Optional
             .anisotropyEnable = VK_TRUE,
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
             .compareEnable = VK_FALSE,
@@ -1182,14 +1201,21 @@ namespace Projector
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        VkBuffer vertexBuffers[] = { scene_.value().GetObj(objectIndex_).GetVertexBuffer() };
-        VkDeviceSize offsets[] = { 0 };
-        vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
+        // VkBuffer vertexBuffers[] = { objects_[objectIndex_].GetVertexBuffer() };
+        // VkDeviceSize offsets[] = { 0 };
+        //vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        vkCmdBindIndexBuffer(commandBuffer, scene_.value().GetObj(objectIndex_).GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, scene_.value().GetObj(objectIndex_).GetDescriptorSet(currentFrame_), 0, nullptr);
+        //vkCmdBindIndexBuffer(commandBuffer, objects_[objectIndex_].GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        //vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, objects_[objectIndex_].GetDescriptorSet(currentFrame_), 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, scene_.value().GetObj(objectIndex_).GetIndicesCount(), 1, 0, 0, 0);
+        //vkCmdDrawIndexed(commandBuffer, objects_[objectIndex_].GetIndicesCount(), 1, 0, 0, 0);
+
+        scene_->Draw(
+            commandBuffer,
+            0u,
+            pipelineLayout_,
+            1u
+        );
 
         vkCmdEndRenderPass(commandBuffer);
 

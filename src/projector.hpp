@@ -166,7 +166,7 @@ namespace Projector
 		VkSampler textureSampler_;
 
 		// Objects
-		std::vector<Rendering::Object> objects_;
+		// std::vector<Rendering::Object> objects_;
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
@@ -174,6 +174,6 @@ namespace Projector
 		// Misc
 		uint16_t objectIndex_ = 0;
 
-		std::optional<Scene::Scene> scene_;
+		Scene::Model* scene_;
 	};
 }
