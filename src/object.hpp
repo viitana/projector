@@ -36,6 +36,8 @@ namespace Rendering
 		std::string texturePath;
 	};
 
+	const std::string DEFAULT_TEXTURE_PATH = "../res/viking_room.png";
+
 	const std::vector<Model> MODELS =
 	{
 		{
@@ -56,6 +58,7 @@ namespace Rendering
 	{
 	public:
 		Object(const Model& model, const VkPhysicalDevice& physicalDevice, const VkDevice& device, const std::vector<VkBuffer>& uniformBuffers, const VkDescriptorSetLayout& descriptorSetLayout, const VkSampler& textureSampler, const VkCommandPool& commandPool, const VkQueue& queue);
+		Object(const std::vector<Vertex> vertices, const std::vector<uint32_t> indices, const VkPhysicalDevice& physicalDevice, const VkDevice& device, const std::vector<VkBuffer>& uniformBuffers, const VkDescriptorSetLayout& descriptorSetLayout, const VkSampler& textureSampler, const VkCommandPool& commandPool, const VkQueue& queue);
 		~Object();
 
 		Object(const Object& o) = delete;

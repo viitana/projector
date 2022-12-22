@@ -4,6 +4,8 @@
 #define STB_IMAGE_STATIC
 #include <stb_image.h>
 
+#include "scene.hpp"
+
 namespace Projector
 {
     Projector::Projector()
@@ -45,6 +47,19 @@ namespace Projector
             );
             objects_.push_back(std::move(obj));
         }
+
+        auto scene = Scene::Scene(
+            "../res/sponza/Sponza.gltf",
+            physicalDevice_,
+            device_,
+            uniformBuffers_,
+            descriptorSetLayout_,
+            textureSampler_,
+            commandPool_,
+            graphicsQueue_
+        );
+
+        scene_.emplace(std::move(scene));
     }
 
     Projector::~Projector()
@@ -104,7 +119,7 @@ namespace Projector
                 changed = true;
                 startTime = std::chrono::high_resolution_clock::now();
 
-                objectIndex_ = (objectIndex_ + 1) % objects_.size();
+                objectIndex_ = (objectIndex_ + 1) % scene_.value().ObjectCount();
                 //LoadObj(Rendering::MODELS[modelIndex_]);
             }
         }
@@ -1167,14 +1182,14 @@ namespace Projector
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        VkBuffer vertexBuffers[] = { objects_[objectIndex_].GetVertexBuffer() };
+        VkBuffer vertexBuffers[] = { scene_.value().GetObj(objectIndex_).GetVertexBuffer() };
         VkDeviceSize offsets[] = { 0 };
         vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
 
-        vkCmdBindIndexBuffer(commandBuffer, objects_[objectIndex_].GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, objects_[objectIndex_].GetDescriptorSet(currentFrame_), 0, nullptr);
+        vkCmdBindIndexBuffer(commandBuffer, scene_.value().GetObj(objectIndex_).GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
+        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, scene_.value().GetObj(objectIndex_).GetDescriptorSet(currentFrame_), 0, nullptr);
 
-        vkCmdDrawIndexed(commandBuffer, objects_[objectIndex_].GetIndicesCount(), 1, 0, 0, 0);
+        vkCmdDrawIndexed(commandBuffer, scene_.value().GetObj(objectIndex_).GetIndicesCount(), 1, 0, 0, 0);
 
         vkCmdEndRenderPass(commandBuffer);
 

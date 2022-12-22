@@ -29,6 +29,18 @@ namespace Rendering
         CreateIndexBuffer(physicalDevice, commandPool, queue);
     }
 
+    Object::Object(const std::vector<Vertex> vertices, const std::vector<uint32_t> indices, const VkPhysicalDevice& physicalDevice, const VkDevice& device, const std::vector<VkBuffer>& uniformBuffers, const VkDescriptorSetLayout& descriptorSetLayout, const VkSampler& textureSampler, const VkCommandPool& commandPool, const VkQueue& queue)
+        : device_(device), vertices_(vertices), indices_(indices)
+    {
+        CreateTextureImage(physicalDevice, commandPool, queue);
+        CreateTextureImageView();
+        CreateDescriptorPool();
+        CreateDescriptorSets(descriptorSetLayout, uniformBuffers, textureSampler);
+        CreateVertexBuffer(physicalDevice, commandPool, queue);
+        CreateIndexBuffer(physicalDevice, commandPool, queue);
+    }
+
+
     Object::~Object()
     {
         Destroy();
@@ -143,7 +155,16 @@ namespace Rendering
     void Object::CreateTextureImage(const VkPhysicalDevice physicalDevice, const VkCommandPool commandPool, const VkQueue queue)
     {
         int texWidth, texHeight, texChannels;
-        stbi_uc* pixels = stbi_load(model_.texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+
+        stbi_uc* pixels;
+        if (model_.texturePath.empty())
+        {
+            pixels = stbi_load(DEFAULT_TEXTURE_PATH.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        }
+        else
+        {
+            pixels = stbi_load(model_.texturePath.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
+        }
         VkDeviceSize imageSize = texWidth * texHeight * 4;
 
         if (!pixels)

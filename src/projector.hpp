@@ -27,6 +27,7 @@
 #include <glm/gtx/hash.hpp>
 
 #include "config.hpp"
+#include "scene.hpp"
 #include "object.hpp"
 #include "util.hpp"
 
@@ -172,5 +173,7 @@ namespace Projector
 
 		// Misc
 		uint16_t objectIndex_ = 0;
+
+		std::optional<Scene::Scene> scene_;
 	};
 }
