@@ -41,46 +41,15 @@ namespace Projector
         CreateUniformBuffers();
         CreateCommandBuffers();
         CreateSyncObjects();
-
-        //for (const Rendering::Model& model : Rendering::MODELS)
-        //{
-        //    Rendering::Object obj = Rendering::Object(
-        //        model,
-        //        physicalDevice_,
-        //        device_,
-        //        uniformBuffers_,
-        //        descriptorSetLayout_,
-        //        textureSampler_,
-        //        commandPool_,
-        //        graphicsQueue_
-        //    );
-        //    objects_.push_back(std::move(obj));
-        //}
-
-        
-
-        //auto scene = Scene::Scene(
-        //    "../res/sponza/Sponza.gltf",
-        //    physicalDevice_,
-        //    device_,
-        //    uniformBuffers_,
-        //    descriptorSetLayout_,
-        //    textureSampler_,
-        //    commandPool_,
-        //    graphicsQueue_
-        //);
-
-        //scene_.emplace(std::move(scene));
     }
 
     Projector::~Projector()
     {
         CleanupSwapChain();
 
-        // Clear objects
-        // objects_.clear();
-
         vkDestroySampler(device_, textureSampler_, nullptr);
+
+        delete scene_;
 
         vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
@@ -160,7 +129,11 @@ namespace Projector
                     break;
                 }
             }
-            if (!layerFound) return false;
+            if (!layerFound)
+            {
+                std::cout << "Unsupported validation layer: " << layerName << std::endl;
+                return false;
+            };
         }
         return true;
     }
@@ -431,6 +404,7 @@ namespace Projector
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
         window_ = glfwCreateWindow(1024, 768, "projector", nullptr, nullptr);
+        // window_ = glfwCreateWindow(1920, 1080, "projector", nullptr, nullptr);
         if (window_ == nullptr)
         {
             throw std::runtime_error("failed to create window!");
@@ -875,7 +849,10 @@ namespace Projector
             .pVertexInputState = Scene::Vertex::GetPipelineVertexInputState({
                 Scene::VertexComponent::Position,
                 Scene::VertexComponent::Normal,
+                Scene::VertexComponent::UV,
+                Scene::VertexComponent::Color,
             }), //&vertexInputInfo,
+
             .pInputAssemblyState = &inputAssembly,
             .pViewportState = &viewportState,
             .pRasterizationState = &rasterizer,

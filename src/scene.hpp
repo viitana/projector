@@ -22,15 +22,12 @@ namespace Scene
 		VkDevice device;
 
 		VkImage image;
-		VkImageLayout imageLayout;
 		VkDeviceMemory deviceMemory;
 		VkImageView view;
 		uint32_t width, height;
 		uint32_t mipLevels;
-		uint32_t layerCount;
 		VkDescriptorImageInfo descriptor;
 		VkSampler sampler;
-		void UpdateDescriptor();
 		void Destroy();
 
 		Texture(tinygltf::Image& gltfimage, const std::string path, const VkPhysicalDevice& physicalDevice, const VkDevice& d, const VkCommandPool& commandPool, const VkQueue& copyQueue, const VkDescriptorPool& descriptorSetPool);
@@ -89,8 +86,6 @@ namespace Scene
 		//} dimensions;
 
 		//void SetDimensions(glm::vec3 min, glm::vec3 max);
-
-		Primitive(uint32_t firstIndex, uint32_t indexCount, Material& material) : firstIndex(firstIndex), indexCount(indexCount), material(material) {};
 	};
 
 	struct Mesh
@@ -145,7 +140,8 @@ namespace Scene
 
 	enum class VertexComponent { Position, Normal, UV, Color, Tangent, Joint0, Weight0 };
 
-	struct Vertex {
+	struct Vertex
+	{
 		glm::vec3 pos;
 		glm::vec3 normal;
 		glm::vec2 uv;
@@ -177,7 +173,6 @@ namespace Scene
 		const float scale_;
 
 		Texture* emptyTexture_;
-		void CreateEmptyTexture(VkQueue transferQueue);
 	public:
 		struct Vertices
 		{

@@ -22,13 +22,6 @@ namespace Scene
     VkMemoryPropertyFlags memoryPropertyFlags = 0;
     uint32_t descriptorBindingFlags = 0;/* DescriptorBindingFlags::ImageBaseColor;*/
 
-	void Texture::UpdateDescriptor()
-	{
-		descriptor.sampler = sampler;
-		descriptor.imageView = view;
-		descriptor.imageLayout = imageLayout;
-	}
-
 	void Texture::Destroy()
 	{
 		if (device)
@@ -38,7 +31,10 @@ namespace Scene
 			vkFreeMemory(device, deviceMemory, nullptr);
 			vkDestroySampler(device, sampler, nullptr);
 		}
-        std::cout << "SKIPPING NIL TEXTURE NUKE" << std::endl;
+        else
+        {
+            std::cout << "SKIPPING NIL TEXTURE NUKE" << std::endl;
+        }
 	}
 
 	Texture::Texture(tinygltf::Image& gltfimage, const std::string path, const VkPhysicalDevice& physicalDevice, const VkDevice& d, const VkCommandPool& commandPool, const VkQueue& copyQueue, const VkDescriptorPool& descriptorSetPool)
@@ -95,21 +91,34 @@ namespace Scene
 
             Util::CreateBuffer(physicalDevice, device, bufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
-            void* data;
-            VK_CHECK_RESULT(vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, &data));
+            uint8_t* data;
+            VK_CHECK_RESULT(vkMapMemory(device, stagingBufferMemory, 0, bufferSize, 0, (void**)&data));
             memcpy(data, buffer, static_cast<size_t>(bufferSize));
             vkUnmapMemory(device, stagingBufferMemory);
 
-            Util::CreateImage(physicalDevice, device, width, height, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, deviceMemory);
+            Util::CreateImage(
+                physicalDevice,
+                device,
+                width,
+                height,
+                mipLevels,
+                VK_SAMPLE_COUNT_1_BIT,
+                VK_FORMAT_R8G8B8A8_UNORM,
+                VK_IMAGE_TILING_OPTIMAL,
+                VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT,
+                VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT,
+                image,
+                deviceMemory
+            );
 
-            Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+            Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
             Util::CopyBufferToImage(device, commandPool, copyQueue, stagingBuffer, image, width,height);
 
             vkDestroyBuffer(device, stagingBuffer, nullptr);
             vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-            //TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels_);
-            Util::GenerateMipmaps(physicalDevice, device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_SRGB, width, height, mipLevels);
+            //Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
+            Util::GenerateMipmaps(physicalDevice, device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, width, height, mipLevels);
 
             if (deleteBuffer)
             {
@@ -146,21 +155,21 @@ namespace Scene
 
             Util::CreateBuffer(physicalDevice, device, ktxTextureSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
-            void* data;
+            uint8_t* data;
             vkMapMemory(device, stagingBufferMemory, 0, ktxTextureSize, 0, (void**)&data);
             memcpy(data, ktxTextureData, ktxTextureSize);
             vkUnmapMemory(device, stagingBufferMemory);
 
-            Util::CreateImage(physicalDevice, device, width, height, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, deviceMemory);
+            Util::CreateImage(physicalDevice, device, width, height, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, deviceMemory);
 
-            Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+            Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
             Util::CopyBufferToImage(device, commandPool, copyQueue, stagingBuffer, image, width, height);
 
             vkDestroyBuffer(device, stagingBuffer, nullptr);
             vkFreeMemory(device, stagingBufferMemory, nullptr);
 
-            //TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels_);
-            Util::GenerateMipmaps(physicalDevice, device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_SRGB, width,height, mipLevels);
+            //Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels);
+            Util::GenerateMipmaps(physicalDevice, device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, width,height, mipLevels);
 
             ktxTexture_Destroy(ktxTexture);
         }
@@ -173,20 +182,21 @@ namespace Scene
             .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
             .magFilter = VK_FILTER_LINEAR,
             .minFilter = VK_FILTER_LINEAR,
-            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_NEAREST,
             .addressModeU = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
             .addressModeW = VK_SAMPLER_ADDRESS_MODE_MIRRORED_REPEAT,
             .mipLodBias = 0.0f, // Optional
-            .anisotropyEnable = VK_FALSE,
+            .anisotropyEnable = VK_FALSE ,
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+            .compareEnable = VK_FALSE,
             .compareOp = VK_COMPARE_OP_NEVER,
             .maxLod = (float)mipLevels,
             .borderColor = VK_BORDER_COLOR_FLOAT_OPAQUE_WHITE,
         };
         VK_CHECK_RESULT(vkCreateSampler(device, &samplerInfo, nullptr, &sampler));
 
-        view = Util::CreateImageView(device, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+        view = Util::CreateImageView(device, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
 
         descriptor = VkDescriptorImageInfo
         {
@@ -209,6 +219,9 @@ namespace Scene
             throw std::runtime_error("failed to load texture image!");
         }
 
+        width = texWidth;
+        height = texHeight;
+
         VkDeviceSize imageSize = texWidth * texHeight * 4;
         std::cout << "Loaded texture image '" << path << "' with dimensions " << texWidth << 'x' << texHeight << std::endl;
 
@@ -219,24 +232,24 @@ namespace Scene
 
         Util::CreateBuffer(physicalDevice, device, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
-        void* data;
-        VK_CHECK_RESULT(vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, &data));
+        uint8_t* data;
+        VK_CHECK_RESULT(vkMapMemory(device, stagingBufferMemory, 0, imageSize, 0, (void**)&data));
         memcpy(data, pixels, static_cast<size_t>(imageSize));
         vkUnmapMemory(device, stagingBufferMemory);
 
         stbi_image_free(pixels);
-        Util::CreateImage(physicalDevice, device, texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, deviceMemory);
+        Util::CreateImage(physicalDevice, device, texWidth, texHeight, mipLevels, VK_SAMPLE_COUNT_1_BIT, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSFER_SRC_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, image, deviceMemory);
 
-        Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
+        Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
         Util::CopyBufferToImage(device, commandPool, copyQueue, stagingBuffer, image, static_cast<uint32_t>(texWidth), static_cast<uint32_t>(texHeight));
 
         vkDestroyBuffer(device, stagingBuffer, nullptr);
         vkFreeMemory(device, stagingBufferMemory, nullptr);
 
         //TransitionImageLayout(textureImage_, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, mipLevels_);
-        Util::GenerateMipmaps(physicalDevice, device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_SRGB, texWidth, texHeight, mipLevels);
+        Util::GenerateMipmaps(physicalDevice, device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, texWidth, texHeight, mipLevels);
 
-        view = Util::CreateImageView(device, image, VK_FORMAT_R8G8B8A8_SRGB, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
+        view = Util::CreateImageView(device, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_ASPECT_COLOR_BIT, mipLevels);
 
         VkPhysicalDeviceProperties properties{};
         vkGetPhysicalDeviceProperties(physicalDevice, &properties);
@@ -276,13 +289,11 @@ namespace Scene
     Texture::Texture(Texture&& other) noexcept
         : device(std::exchange(other.device, {}))
         , image(std::exchange(other.image, {}))
-        , imageLayout(std::exchange(other.imageLayout, {}))
         , deviceMemory(std::exchange(other.deviceMemory, {}))
         , view(std::exchange(other.view, {}))
         , width(std::exchange(other.width, 0))
         , height(std::exchange(other.height, 0))
         , mipLevels(std::exchange(other.mipLevels, 0))
-        , layerCount(std::exchange(other.layerCount, 0))
         , descriptor(std::exchange(other.descriptor, {}))
         , sampler(std::exchange(other.sampler, {}))
     {
@@ -356,6 +367,8 @@ namespace Scene
             }
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
         }
+
+        std::cout << "Created image sampler descriptor sets for base color texture" << std::endl;
     }
 
     Mesh::Mesh(const VkPhysicalDevice& pd, const VkDevice& d, const glm::mat4 matrix)
@@ -422,7 +435,7 @@ namespace Scene
             view = glm::translate(view, glm::vec3(2.f, 5.0f, 0.0f));
             glm::mat4 proj = glm::perspective(glm::radians(55.0f), 1024 / (float)768, 0.1f, 20.0f);
             
-            n += 0.001f;
+            n += 0.0004f;
 
             mesh->uniformBlock.matrix = proj * view * model;
             memcpy(mesh->uniformBuffer.mapped, &mesh->uniformBlock, sizeof(mesh->uniformBlock));
@@ -443,15 +456,15 @@ namespace Scene
             //    memcpy(mesh->uniformBuffer.mapped, &mesh->uniformBlock, sizeof(mesh->uniformBlock));
             //}
             //else
-            {
-                /*memcpy(mesh->uniformBuffer.mapped, &m, sizeof(glm::mat4));*/
-            }
+            //{
+            //    memcpy(mesh->uniformBuffer.mapped, &m, sizeof(glm::mat4));
+            //}
         }
-//
-//        for (auto& child : children)
-//{
-//            child->Update();
-//        }
+
+        //for (auto& child : children)
+        //{
+        //    child->Update();
+        //}
     }
 
     Node::~Node()
@@ -482,7 +495,8 @@ namespace Scene
 
     VkVertexInputAttributeDescription Vertex::GetInputAttributeDescription(uint32_t binding, uint32_t location, VertexComponent component)
     {
-        switch (component) {
+        switch (component)
+        {
         case VertexComponent::Position:
             return VkVertexInputAttributeDescription({ location, binding, VK_FORMAT_R32G32B32_SFLOAT, offsetof(Vertex, pos) });
         case VertexComponent::Normal:
@@ -572,11 +586,6 @@ namespace Scene
             descriptorSetLayoutImage = VK_NULL_HANDLE;
         }
         vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
-    }
-
-    void Model::CreateEmptyTexture(VkQueue transferQueue)
-    {
-
     }
 
     void Model::LoadNode(Node* parent, const tinygltf::Node& node, uint32_t nodeIndex, const tinygltf::Model& model, std::vector<uint32_t>& indexBuffer, std::vector<Vertex>& vertexBuffer, float globalscale)
@@ -789,10 +798,14 @@ namespace Scene
                         return;
                     }
                 }
-                Primitive* newPrimitive = new Primitive(indexStart, indexCount, primitive.material > -1 ? materials[primitive.material] : materials.back());
-                newPrimitive->firstVertex = vertexStart;
-                newPrimitive->vertexCount = vertexCount;/*
-                newPrimitive->setDimensions(posMin, posMax);*/
+                Primitive* newPrimitive = new Primitive
+                {
+                    .firstIndex = indexStart,
+                    .indexCount = indexCount,
+                    .firstVertex = vertexStart,
+                    .vertexCount = vertexCount,
+                    .material = primitive.material > -1 ? materials[primitive.material] : materials.back(),
+                };
                 newMesh->primitives.push_back(newPrimitive);
             }
             newNode->mesh = newMesh;
@@ -1022,13 +1035,13 @@ namespace Scene
         Util::CreateBuffer(physicalDevice_, device_, vertexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, vertexStaging.buffer, vertexStaging.memory);
         Util::CreateBuffer(physicalDevice_, device_, indexBufferSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, indexStaging.buffer, indexStaging.memory);
 
-        void* data;
+        uint8_t* data;
 
-        VK_CHECK_RESULT(vkMapMemory(device_, vertexStaging.memory, 0, vertexBufferSize, 0, &data));
+        VK_CHECK_RESULT(vkMapMemory(device_, vertexStaging.memory, 0, vertexBufferSize, 0, (void**)&data));
         memcpy(data, vertexBuffer.data(), (size_t)vertexBufferSize);
         vkUnmapMemory(device_, vertexStaging.memory);
 
-        VK_CHECK_RESULT(vkMapMemory(device_, indexStaging.memory, 0, indexBufferSize, 0, &data));
+        VK_CHECK_RESULT(vkMapMemory(device_, indexStaging.memory, 0, indexBufferSize, 0, (void**)&data));
         memcpy(data, indexBuffer.data(), (size_t)indexBufferSize);
         vkUnmapMemory(device_, indexStaging.memory);
 
@@ -1180,13 +1193,11 @@ namespace Scene
                 0,
                 nullptr
             );
-            
 
             for (Primitive* primitive : node->mesh->primitives)
             {
                 bool skip = false;
                 const Material& material = primitive->material;
-
 
                 //if (renderFlags & RenderFlags::RenderOpaqueNodes)
                 //{
@@ -1204,7 +1215,16 @@ namespace Scene
                 {
                     //if (renderFlags & RenderFlags::BindImages)
                     {
-                        vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout, bindImageSet, 1, &material.descriptorSets[0], 0, nullptr);
+                        vkCmdBindDescriptorSets(
+                            commandBuffer,
+                            VK_PIPELINE_BIND_POINT_GRAPHICS,
+                            pipelineLayout,
+                            bindImageSet,
+                            1,
+                            &material.descriptorSets[0],
+                            0,
+                            nullptr
+                        );
                     }
                     vkCmdDrawIndexed(commandBuffer, primitive->indexCount, 1, primitive->firstIndex, 0, 0);
                 }
