@@ -28,7 +28,6 @@
 
 #include "config.hpp"
 #include "scene.hpp"
-#include "object.hpp"
 #include "util.hpp"
 
 namespace Projector
@@ -57,6 +56,13 @@ namespace Projector
 		std::vector<VkPresentModeKHR> presentModes;
 	};
 
+	struct UniformBufferObject
+	{
+		alignas(16) glm::mat4 model;
+		alignas(16) glm::mat4 view;
+		alignas(16) glm::mat4 proj;
+	};
+
 	class Projector
 	{
 	public:
@@ -64,9 +70,6 @@ namespace Projector
 		~Projector();
 
 		void Run();
-
-		void LoadObj(const Rendering::Model model);
-
 		void Resized();
 	private:
 		const bool CheckValidationLayerSupport() const;
@@ -83,8 +86,6 @@ namespace Projector
 		const bool HasStencilComponent(VkFormat format) const;
 		const VkSampleCountFlagBits GetMaxUsableSampleCount() const;
 
-		void LoadScene(const std::string& filename);
-
 		void CreateInstance();
 		void CreateSurface();
 		void PickPhysicalDevice();
@@ -98,7 +99,6 @@ namespace Projector
 		void CreateColorResources();
 		void CreateDepthResources();
 		void CreateFramebuffers();
-		void CreateTextureSampler();
 		void CreateUniformBuffers();
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
@@ -163,23 +163,13 @@ namespace Projector
 		std::vector<VkDeviceMemory> uniformBuffersMemory_;
 		std::vector<void*> uniformBuffersMapped_;
 
-		// Vertex data
-		std::vector<Rendering::Vertex> vertices_;
-		std::vector<uint32_t> indices_;
-
-		// Texture data
-		uint32_t mipLevels_;
-		VkSampler textureSampler_;
-
-		// Objects
-		// std::vector<Rendering::Object> objects_;
-
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
 
 		// Misc
 		uint16_t objectIndex_ = 0;
 
+		// GLFW scene model
 		Scene::Model* scene_;
 	};
 }

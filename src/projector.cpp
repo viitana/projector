@@ -37,7 +37,6 @@ namespace Projector
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
-        CreateTextureSampler();
         CreateUniformBuffers();
         CreateCommandBuffers();
         CreateSyncObjects();
@@ -46,8 +45,6 @@ namespace Projector
     Projector::~Projector()
     {
         CleanupSwapChain();
-
-        vkDestroySampler(device_, textureSampler_, nullptr);
 
         delete scene_;
 
@@ -98,10 +95,6 @@ namespace Projector
             {
                 changed = true;
                 startTime = std::chrono::high_resolution_clock::now();
-
-                //objectIndex_ = (objectIndex_ + 1) % scene_.value().ObjectCount();
-                // objectIndex_ = (objectIndex_ + 1) % objects_.size();
-                //LoadObj(Rendering::MODELS[modelIndex_]);
             }
         }
         vkDeviceWaitIdle(device_);
@@ -677,16 +670,7 @@ namespace Projector
             .pImmutableSamplers = nullptr, // Optional
         };
 
-        VkDescriptorSetLayoutBinding samplerLayoutBinding
-        {
-            .binding = 1,
-            .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-            .descriptorCount = 1,
-            .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-            .pImmutableSamplers = nullptr,
-        };
-
-        std::array<VkDescriptorSetLayoutBinding, 2> bindings = { uboLayoutBinding, samplerLayoutBinding };
+        std::array<VkDescriptorSetLayoutBinding, 1> bindings = { uboLayoutBinding };
         VkDescriptorSetLayoutCreateInfo layoutInfo
         {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -724,18 +708,6 @@ namespace Projector
             .pName = "main",
         };
         VkPipelineShaderStageCreateInfo shaderStages[] = { vertShaderStageInfo, fragShaderStageInfo };
-
-        auto bindingDescription = Rendering::Vertex::GetBindingDescription();
-        auto attributeDescriptions = Rendering::Vertex::GetAttributeDescriptions();
-
-        VkPipelineVertexInputStateCreateInfo vertexInputInfo
-        {
-            .sType = VK_STRUCTURE_TYPE_PIPELINE_VERTEX_INPUT_STATE_CREATE_INFO,
-            .vertexBindingDescriptionCount = 1,
-            .pVertexBindingDescriptions = &bindingDescription,
-            .vertexAttributeDescriptionCount = static_cast<uint32_t>(attributeDescriptions.size()),
-            .pVertexAttributeDescriptions = attributeDescriptions.data(),
-        };
 
         VkPipelineInputAssemblyStateCreateInfo inputAssembly
         {
@@ -851,7 +823,7 @@ namespace Projector
                 Scene::VertexComponent::Normal,
                 Scene::VertexComponent::UV,
                 Scene::VertexComponent::Color,
-            }), //&vertexInputInfo,
+            }),
 
             .pInputAssemblyState = &inputAssembly,
             .pViewportState = &viewportState,
@@ -940,39 +912,11 @@ namespace Projector
         }
     }
 
-    void Projector::CreateTextureSampler()
-    {
-        VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
 
-        VkSamplerCreateInfo samplerInfo
-        {
-            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
-            .magFilter = VK_FILTER_LINEAR,
-            .minFilter = VK_FILTER_LINEAR,
-            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .anisotropyEnable = VK_TRUE,
-            .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
-            .compareEnable = VK_FALSE,
-            .compareOp = VK_COMPARE_OP_ALWAYS,
-            .minLod = 0, // Optional
-            .maxLod = static_cast<float>(mipLevels_),
-            .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
-            .unnormalizedCoordinates = VK_FALSE,
-        };
-
-        if (vkCreateSampler(device_, &samplerInfo, nullptr, &textureSampler_) != VK_SUCCESS)
-        {
-            throw std::runtime_error("failed to create texture sampler!");
-        }
-    }
 
     void Projector::CreateUniformBuffers()
     {
-        VkDeviceSize bufferSize = sizeof(Rendering::UniformBufferObject);
+        VkDeviceSize bufferSize = sizeof(UniformBufferObject);
 
         uniformBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
         uniformBuffersMemory_.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1038,7 +982,7 @@ namespace Projector
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        Rendering::UniformBufferObject ubo
+        UniformBufferObject ubo
         {
             .model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
             .view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
@@ -1060,7 +1004,11 @@ namespace Projector
             RecreateSwapChain();
             return;
         }
-        else if (result != VK_SUCCESS && result != VK_SUBOPTIMAL_KHR)
+        else if (result == VK_SUBOPTIMAL_KHR)
+        {
+            std::cout << "Suboptimal swap chain" << std::endl;
+        }
+        else if (result != VK_SUCCESS)
         {
             throw std::runtime_error("failed to acquire swap chain image!");
         }

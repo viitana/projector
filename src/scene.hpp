@@ -5,10 +5,10 @@
 
 #define TINYGLTF_NO_STB_IMAGE_WRITE
 #include "tiny_gltf.h"
+#include <glm/glm.hpp>
+#include <glm/gtc/quaternion.hpp>
 
 #include "vulkan/vulkan.h"
-
-#include "object.hpp"
 
 namespace Scene
 {
