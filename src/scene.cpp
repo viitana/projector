@@ -422,22 +422,9 @@ namespace Scene
 
     void Node::Update()
     {
-        static float n = 0.0f;
-
         if (mesh)
         {
-            glm::mat4 m = GetMatrix();
-
-            glm::mat4 model = m;
-            //model = glm::translate(model, glm::vec3(0.0f, 2.0f, 0.0f));
-            glm::mat4 view = glm::lookAt(glm::vec3(1, -0.5f, 0.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-            view = glm::rotate(view, n * glm::radians(90.0f), glm::vec3(0.0f, 1.0f, 0.0f));
-            view = glm::translate(view, glm::vec3(2.f, 5.0f, 0.0f));
-            glm::mat4 proj = glm::perspective(glm::radians(55.0f), 1024 / (float)768, 0.1f, 20.0f);
-            
-            n += 0.0004f;
-
-            mesh->uniformBlock.matrix = proj * view * model;
+            mesh->uniformBlock.matrix = GetMatrix();
             memcpy(mesh->uniformBuffer.mapped, &mesh->uniformBlock, sizeof(mesh->uniformBlock));
             // ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0)
 
@@ -461,10 +448,10 @@ namespace Scene
             //}
         }
 
-        //for (auto& child : children)
-        //{
-        //    child->Update();
-        //}
+        for (auto& child : children)
+        {
+            child->Update();
+        }
     }
 
     Node::~Node()
@@ -950,66 +937,6 @@ namespace Scene
             throw std::runtime_error("Could not load glTF file \"" + filename + "\": " + error);
         }
 
-        for (Node* node : linearNodes)
-        {
-            if (node->mesh)
-            {
-                /*const glm::mat4 localMatrix = node->getMatrix();*/
-                for (Primitive* primitive : node->mesh->primitives) {
-                    for (uint32_t i = 0; i < primitive->vertexCount; i++) {
-                        Vertex& vertex = vertexBuffer[primitive->firstVertex + i];
-                        // Pre-transform vertex positions by node-hierarchy
-                        /*if (preTransform) {
-                            vertex.pos = glm::vec3(localMatrix * glm::vec4(vertex.pos, 1.0f));
-                            vertex.normal = glm::normalize(glm::mat3(localMatrix) * vertex.normal);
-                        }*/
-                        // Flip Y-Axis of vertex positions
-                        //if (flipY)
-                        {
-                            vertex.pos.y *= -1.0f;
-                            vertex.normal.y *= -1.0f;
-                        }
-                        //// Pre-Multiply vertex colors with material base color
-                        //if (preMultiplyColor) {
-                        //    vertex.color = primitive->material.baseColorFactor * vertex.color;
-                        //}
-                    }
-                }
-            }
-        }
-
-        // Pre-Calculations for requested features
-        //if ((fileLoadingFlags & FileLoadingFlags::PreTransformVertices) || (fileLoadingFlags & FileLoadingFlags::PreMultiplyVertexColors) || (fileLoadingFlags & FileLoadingFlags::FlipY))
-        //{
-        //    const bool preTransform = fileLoadingFlags & FileLoadingFlags::PreTransformVertices;
-        //    const bool preMultiplyColor = fileLoadingFlags & FileLoadingFlags::PreMultiplyVertexColors;
-        //    const bool flipY = fileLoadingFlags & FileLoadingFlags::FlipY;
-        //    for (Node* node : linearNodes) {
-        //        if (node->mesh) {
-        //            const glm::mat4 localMatrix = node->getMatrix();
-        //            for (Primitive* primitive : node->mesh->primitives) {
-        //                for (uint32_t i = 0; i < primitive->vertexCount; i++) {
-        //                    Vertex& vertex = vertexBuffer[primitive->firstVertex + i];
-        //                    // Pre-transform vertex positions by node-hierarchy
-        //                    if (preTransform) {
-        //                        vertex.pos = glm::vec3(localMatrix * glm::vec4(vertex.pos, 1.0f));
-        //                        vertex.normal = glm::normalize(glm::mat3(localMatrix) * vertex.normal);
-        //                    }
-        //                    // Flip Y-Axis of vertex positions
-        //                    if (flipY) {
-        //                        vertex.pos.y *= -1.0f;
-        //                        vertex.normal.y *= -1.0f;
-        //                    }
-        //                    // Pre-Multiply vertex colors with material base color
-        //                    if (preMultiplyColor) {
-        //                        vertex.color = primitive->material.baseColorFactor * vertex.color;
-        //                    }
-        //                }
-        //            }
-        //        }
-        //    }
-        //}
-
         for (auto extension : gltfModel.extensionsUsed)
         {
             if (extension == "KHR_materials_pbrSpecularGlossiness")
@@ -1181,18 +1108,16 @@ namespace Scene
         vkCmdBindIndexBuffer(commandBuffer, indices.buffer, 0, VK_INDEX_TYPE_UINT32);
         if (node->mesh)
         {
-            node->Update();
-
             vkCmdBindDescriptorSets(
                 commandBuffer,
                 VK_PIPELINE_BIND_POINT_GRAPHICS,
                 pipelineLayout,
-                0,
+                1,
                 1,
                 &node->mesh->uniformBuffer.descriptorSet,
                 0,
                 nullptr
-            );
+            );  
 
             for (Primitive* primitive : node->mesh->primitives)
             {
@@ -1219,7 +1144,7 @@ namespace Scene
                             commandBuffer,
                             VK_PIPELINE_BIND_POINT_GRAPHICS,
                             pipelineLayout,
-                            bindImageSet,
+                            2,
                             1,
                             &material.descriptorSets[0],
                             0,

@@ -58,7 +58,6 @@ namespace Projector
 
 	struct UniformBufferObject
 	{
-		alignas(16) glm::mat4 model;
 		alignas(16) glm::mat4 view;
 		alignas(16) glm::mat4 proj;
 	};
@@ -94,12 +93,14 @@ namespace Projector
 		void CreateImageViews();
 		void CreateRenderPass();
 		void CreateDescriptorSetLayout();
+		void CreateDescriptorPool();
+		void CreateUniformBuffers();
+		void CreateDescriptorSets();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
 		void CreateColorResources();
 		void CreateDepthResources();
 		void CreateFramebuffers();
-		void CreateUniformBuffers();
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
 
@@ -146,9 +147,16 @@ namespace Projector
 
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
-		VkDescriptorSetLayout descriptorSetLayout_;
 		VkPipelineLayout pipelineLayout_;
 		VkPipeline graphicsPipeline_;
+
+		// Global uniform buffer(s) & descriptor sets
+		VkDescriptorPool descriptorPool_;
+		VkDescriptorSetLayout descriptorSetLayout_;
+		std::vector<VkDescriptorSet> descriptorSets_;
+		std::vector<VkBuffer> uniformBuffers_;
+		std::vector<VkDeviceMemory> uniformBuffersMemory_;
+		std::vector<void*> uniformBuffersMapped_;
 
 		// Command buffers & syncing
 		VkCommandPool commandPool_;
@@ -157,11 +165,6 @@ namespace Projector
 		std::vector<VkSemaphore> renderFinishedSemaphores_;
 		std::vector<VkFence> inFlightFences_;
 		uint32_t currentFrame_ = 0;
-
-		// Global uniform buffer(s)
-		std::vector<VkBuffer> uniformBuffers_;
-		std::vector<VkDeviceMemory> uniformBuffersMemory_;
-		std::vector<void*> uniformBuffersMapped_;
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;

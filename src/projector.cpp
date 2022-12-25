@@ -33,11 +33,13 @@ namespace Projector
 
         CreateRenderPass();
         CreateDescriptorSetLayout();
+        CreateDescriptorPool();
+        CreateUniformBuffers();
+        CreateDescriptorSets();
         CreateGraphicsPipeline();
         CreateColorResources();
         CreateDepthResources();
         CreateFramebuffers();
-        CreateUniformBuffers();
         CreateCommandBuffers();
         CreateSyncObjects();
     }
@@ -57,6 +59,7 @@ namespace Projector
         }
 
         vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
+        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
         vkDestroyRenderPass(device_, renderPass_, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -207,6 +210,19 @@ namespace Projector
 
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        for (auto& q_family : queueFamilies)
+        {
+            std::cout << "Queue number: " << q_family.queueCount << std::endl;
+            std::cout << "\tQueue flags: " << q_family.queueFlags << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) std::cout << "\t VK_QUEUE_GRAPHICS_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_COMPUTE_BIT) std::cout << "\t VK_QUEUE_COMPUTE_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_TRANSFER_BIT) std::cout << "\t VK_QUEUE_TRANSFER_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) std::cout << "\t VK_QUEUE_SPARSE_BINDING_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_PROTECTED_BIT) std::cout << "\t VK_QUEUE_PROTECTED_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) std::cout << "\t VK_QUEUE_OPTICAL_FLOW_BIT_NV" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_FLAG_BITS_MAX_ENUM) std::cout << "\t VK_QUEUE_FLAG_BITS_MAX_ENUM" << std::endl;
+        }
 
         QueueFamilyIndices indices;
         int i = 0;
@@ -667,7 +683,6 @@ namespace Projector
             .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
             .descriptorCount = 1,
             .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
-            .pImmutableSamplers = nullptr, // Optional
         };
 
         std::array<VkDescriptorSetLayoutBinding, 1> bindings = { uboLayoutBinding };
@@ -780,6 +795,7 @@ namespace Projector
         };
 
         const std::vector<VkDescriptorSetLayout> setLayouts = {
+            descriptorSetLayout_,
             Scene::descriptorSetLayoutUbo,
             Scene::descriptorSetLayoutImage,
         };
@@ -788,9 +804,9 @@ namespace Projector
         {
             .sType = VK_STRUCTURE_TYPE_PIPELINE_LAYOUT_CREATE_INFO,
             .setLayoutCount = static_cast<uint32_t>(setLayouts.size()), //1,
-            .pSetLayouts = setLayouts.data(), //&descriptorSetLayout_,
-            .pushConstantRangeCount = 0, // Optional
-            .pPushConstantRanges = nullptr, // Optional
+            .pSetLayouts = setLayouts.data(),
+            .pushConstantRangeCount = 0,
+            .pPushConstantRanges = nullptr,
         };
 
         if (vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS)
@@ -912,8 +928,6 @@ namespace Projector
         }
     }
 
-
-
     void Projector::CreateUniformBuffers()
     {
         VkDeviceSize bufferSize = sizeof(UniformBufferObject);
@@ -926,6 +940,79 @@ namespace Projector
         {
             Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers_[i], uniformBuffersMemory_[i]);
             vkMapMemory(device_, uniformBuffersMemory_[i], 0, bufferSize, 0, &uniformBuffersMapped_[i]);
+        }
+    }
+
+    void Projector::CreateDescriptorPool()
+    {
+        std::array<VkDescriptorPoolSize, 2> poolSizes
+        {
+            VkDescriptorPoolSize
+            {
+                .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+            },
+            VkDescriptorPoolSize
+            {
+                .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+            },
+        };
+
+        VkDescriptorPoolCreateInfo poolInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .maxSets = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+            .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
+            .pPoolSizes = poolSizes.data(),
+        };
+
+        if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create descriptor pool!");
+        }
+    }
+
+    void Projector::CreateDescriptorSets()
+    {
+        std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout_);
+
+        VkDescriptorSetAllocateInfo allocInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_ALLOCATE_INFO,
+            .descriptorPool = descriptorPool_,
+            .descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+            .pSetLayouts = layouts.data(),
+        };
+
+        descriptorSets_.resize(MAX_FRAMES_IN_FLIGHT);
+        if (vkAllocateDescriptorSets(device_, &allocInfo, descriptorSets_.data()) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to allocate descriptor sets!");
+        }
+
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            VkDescriptorBufferInfo bufferInfo
+            {
+                .buffer = uniformBuffers_[i],
+                .offset = 0,
+                .range = sizeof(UniformBufferObject),
+            };
+            std::array<VkWriteDescriptorSet, 1> descriptorWrites
+            {
+                VkWriteDescriptorSet
+                {
+                    .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                    .dstSet = descriptorSets_[i],
+                    .dstBinding = 0,
+                    .dstArrayElement = 0,
+                    .descriptorCount = 1,
+                    .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
+                    .pBufferInfo = &bufferInfo,
+                }
+            };
+            vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
         }
     }
 
@@ -984,9 +1071,24 @@ namespace Projector
 
         UniformBufferObject ubo
         {
-            .model = glm::rotate(glm::mat4(1.0f), time * glm::radians(90.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
-            .view = glm::lookAt(glm::vec3(2.0f, 2.0f, 2.0f), glm::vec3(0.0f, 0.0f, 0.0f), glm::vec3(0.0f, 0.0f, 1.0f)),
-            .proj = glm::perspective(glm::radians(45.0f), swapChainExtent_.width / (float)swapChainExtent_.height, 0.1f, 10.0f),
+            .view = glm::translate(
+                glm::rotate(
+                    glm::lookAt(
+                        glm::vec3(1.0f, 1.0f, 0.0f),
+                        glm::vec3(0.0f, 0.0f, 0.0f),
+                        glm::vec3(0.0f, 1.0f, 0.0f)
+                    ),
+                    time * glm::radians(45.0f),
+                    glm::vec3(0.0f, 1.0f, 0.0f)
+                ),
+                glm::vec3(0.0f, -2.0f, 0.0f)
+            ),
+            .proj = glm::perspective(
+                glm::radians(75.0f),
+                swapChainExtent_.width / (float)swapChainExtent_.height,
+                0.1f,
+                100.0f
+            ),
         };
         ubo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
 
@@ -1147,6 +1249,17 @@ namespace Projector
         //vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, objects_[objectIndex_].GetDescriptorSet(currentFrame_), 0, nullptr);
 
         //vkCmdDrawIndexed(commandBuffer, objects_[objectIndex_].GetIndicesCount(), 1, 0, 0, 0);
+
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            pipelineLayout_,
+            0,
+            1,
+            &descriptorSets_[currentFrame_],
+            0,
+            nullptr
+        );
 
         scene_->Draw(
             commandBuffer,
