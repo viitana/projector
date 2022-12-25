@@ -1001,12 +1001,13 @@ namespace Projector
         VkResult result = vkAcquireNextImageKHR(device_, swapChain_, UINT64_MAX, imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
+            std::cout << "Out-of-date swapchain on image acquire" << std::endl;
             RecreateSwapChain();
             return;
         }
         else if (result == VK_SUBOPTIMAL_KHR)
         {
-            std::cout << "Suboptimal swap chain" << std::endl;
+            std::cout << "Suboptimal swapchain on image acquire" << std::endl;
         }
         else if (result != VK_SUCCESS)
         {
@@ -1053,9 +1054,21 @@ namespace Projector
         };
 
         result = vkQueuePresentKHR(presentQueue_, &presentInfo);
-        if (result == VK_ERROR_OUT_OF_DATE_KHR || result == VK_SUBOPTIMAL_KHR || framebufferResized_)
+        if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
+            std::cout << "Out-of-date swapchain on image present" << std::endl;
             RecreateSwapChain();
+        }
+        if (result == VK_SUBOPTIMAL_KHR)
+        {
+            std::cout << "Suboptimal swapchain on image present" << std::endl;
+            RecreateSwapChain();
+        }
+        if (framebufferResized_)
+        {
+            std::cout << "Framebuffer resized on image present" << std::endl;
+            RecreateSwapChain();
+            framebufferResized_ = false;
         }
         else if (result != VK_SUCCESS)
         {
