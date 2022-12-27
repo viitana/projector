@@ -157,7 +157,7 @@ namespace Util
         return imageView;
     }
     
-    void TransitionImageLayout(const VkDevice& device, const VkCommandPool& commandPool, const VkQueue& queue, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels)
+    void TransitionImageLayout(const VkDevice& device, const VkCommandPool& commandPool, const VkQueue& queue, VkImage image, VkFormat format, VkImageLayout oldLayout, VkImageLayout newLayout, uint32_t mipLevels, VkCommandBuffer commandBuffer)
     {
         VkAccessFlags sourceAccessMask;
         VkAccessFlags destinationAccessMask;
@@ -177,6 +177,27 @@ namespace Util
             destinationAccessMask = VK_ACCESS_SHADER_READ_BIT;
             sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
             destinationStage = VK_PIPELINE_STAGE_FRAGMENT_SHADER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR && newLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL)
+        {
+            sourceAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            destinationAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_PRESENT_SRC_KHR)
+        {
+            sourceAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            destinationAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+            destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        }
+        else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
+        {
+            sourceAccessMask = 0;
+            destinationAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT;
+            destinationStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
         }
         else
         {
@@ -203,7 +224,13 @@ namespace Util
             }
         };
 
-        VkCommandBuffer commandBuffer = BeginSingleTimeCommands(device, commandPool);
+        bool createdCommandBuffer = false;
+        if (!commandBuffer)
+        {
+            commandBuffer = BeginSingleTimeCommands(device, commandPool);
+            createdCommandBuffer = true;
+        }
+
         vkCmdPipelineBarrier(
             commandBuffer,
             sourceStage, destinationStage,
@@ -212,7 +239,7 @@ namespace Util
             0, nullptr,
             1, &barrier
         );
-        EndSingleTimeCommands(device, commandPool, queue, commandBuffer);
+        if (createdCommandBuffer) EndSingleTimeCommands(device, commandPool, queue, commandBuffer);
     }
     
     void CopyBufferToImage(const VkDevice& device, const VkCommandPool& commandPool, const VkQueue& queue, VkBuffer buffer, VkImage image, uint32_t width, uint32_t height)
@@ -359,6 +386,40 @@ namespace Util
         );
 
         EndSingleTimeCommands(device, commandPool, queue, commandBuffer);
+    }
+
+    void CopyImageToImage(const VkDevice& device, const VkCommandPool& commandPool, const VkQueue& queue, VkImage src, VkImageLayout srcLayout, VkImage dst, VkImageLayout dstLayout, uint32_t width, uint32_t height, VkCommandBuffer commandBuffer)
+    {
+        const VkImageCopy region
+        {
+            .srcSubresource =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .srcOffset = { 0, 0, 0 }, //{ mipWidth, mipHeight, 1 },*/
+            .dstSubresource =
+            {
+                .aspectMask = VK_IMAGE_ASPECT_COLOR_BIT,
+                .mipLevel = 0,
+                .baseArrayLayer = 0,
+                .layerCount = 1,
+            },
+            .dstOffset = { 0, 0, 0 }, //{ mipWidth, mipHeight, 1 },*/
+            .extent = { width, height, 1 }, //{ mipWidth, mipHeight, 1 },*/
+        };
+
+        bool createdCommandBuffer = false;
+        if (!commandBuffer)
+        {
+            commandBuffer = BeginSingleTimeCommands(device, commandPool);
+            createdCommandBuffer = true;
+        }
+
+        vkCmdCopyImage(commandBuffer, src, srcLayout, dst, dstLayout, 1, &region);
+        if (createdCommandBuffer) EndSingleTimeCommands(device, commandPool, queue, commandBuffer);
     }
 
     const VkCommandBuffer BeginSingleTimeCommands(const VkDevice& device, const VkCommandPool& commandPool)

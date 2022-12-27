@@ -92,21 +92,22 @@ namespace Projector
 		void CreateSwapChain();
 		void CreateImageViews();
 		void CreateRenderPass();
+		void CreateWarpSampler();
 		void CreateDescriptorSetLayout();
 		void CreateDescriptorPool();
 		void CreateUniformBuffers();
 		void CreateDescriptorSets();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
-		void CreateColorResources();
-		void CreateDepthResources();
+		void CreateRenderImageResources();
 		void CreateFramebuffers();
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
 
 		void UpdateUniformBuffer(uint32_t currentImage);
 		void DrawFrame();
-		void RecordCommandBuffer(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
+		void RecordDraw(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
+		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
 
 		void RecreateSwapChain();
 		void CleanupSwapChain();
@@ -140,29 +141,45 @@ namespace Projector
 		VkDeviceMemory depthImageMemory_;
 		VkImageView depthImageView_;
 
-		// MSAA / color buffer(image
+		// MSAA / color buffer image
 		VkImage colorImage_;
 		VkDeviceMemory colorImageMemory_;
 		VkImageView colorImageView_;
+
+		std::vector<VkImage> resultImages_;
+		std::vector<VkDeviceMemory> resultImagesMemory_;
+		std::vector<VkImageView> resultImageViews_;
 
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
 		VkPipelineLayout pipelineLayout_;
 		VkPipeline graphicsPipeline_;
 
+		VkRenderPass warpRenderPass_;
+		VkPipelineLayout warpPipelineLayout_;
+		VkPipeline warpGraphicsPipeline_;
+
 		// Global uniform buffer(s) & descriptor sets
-		VkDescriptorPool descriptorPool_;
 		VkDescriptorSetLayout descriptorSetLayout_;
+		VkDescriptorPool descriptorPool_;
 		std::vector<VkDescriptorSet> descriptorSets_;
 		std::vector<VkBuffer> uniformBuffers_;
 		std::vector<VkDeviceMemory> uniformBuffersMemory_;
 		std::vector<void*> uniformBuffersMapped_;
+
+		VkDescriptorSetLayout warpDescriptorSetLayout_;
+		VkSampler warpSampler_;
+		std::vector<VkDescriptorSet> warpDescriptorSets_;
+		std::vector<VkBuffer> warpUniformBuffers_;
+		std::vector<VkDeviceMemory> warpUniformBuffersMemory_;
+		std::vector<void*> warpUniformBuffersMapped_;
 
 		// Command buffers & syncing
 		VkCommandPool commandPool_;
 		std::vector<VkCommandBuffer> commandBuffers_;
 		std::vector<VkSemaphore> imageAvailableSemaphores_;
 		std::vector<VkSemaphore> renderFinishedSemaphores_;
+		std::vector<VkSemaphore> warpFinishedSemaphores_;
 		std::vector<VkFence> inFlightFences_;
 		uint32_t currentFrame_ = 0;
 
