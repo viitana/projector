@@ -91,6 +91,7 @@ namespace Projector
 		void CreateLogicalDevice();
 		void CreateSwapChain();
 		void CreateImageViews();
+		void CreateRenderImageResources();
 		void CreateRenderPass();
 		void CreateWarpSampler();
 		void CreateDescriptorSetLayout();
@@ -99,7 +100,6 @@ namespace Projector
 		void CreateDescriptorSets();
 		void CreateGraphicsPipeline();
 		void CreateCommandPool();
-		void CreateRenderImageResources();
 		void CreateFramebuffers();
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
@@ -134,6 +134,7 @@ namespace Projector
 		VkFormat swapChainImageFormat_;
 		VkExtent2D swapChainExtent_;
 		std::vector<VkFramebuffer> swapChainFramebuffers_;
+		std::vector<VkFramebuffer> warpFramebuffers_;
 		bool framebufferResized_ = false;
 
 		// Depth buffer/image
@@ -146,9 +147,14 @@ namespace Projector
 		VkDeviceMemory colorImageMemory_;
 		VkImageView colorImageView_;
 
-		std::vector<VkImage> resultImages_;
-		std::vector<VkDeviceMemory> resultImagesMemory_;
-		std::vector<VkImageView> resultImageViews_;
+		// Warp MSAA / color buffer image
+		VkImage warpColorImage_;
+		VkDeviceMemory warpColorImageMemory_;
+		VkImageView warpColorImageView_;
+
+		VkImage resultImage_;
+		VkDeviceMemory resultImageMemory_;
+		VkImageView resultImageView_;
 
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
@@ -176,7 +182,8 @@ namespace Projector
 
 		// Command buffers & syncing
 		VkCommandPool commandPool_;
-		std::vector<VkCommandBuffer> commandBuffers_;
+		std::vector<VkCommandBuffer> drawCommandBuffers_;
+		std::vector<VkCommandBuffer> warpCommandBuffers_;
 		std::vector<VkSemaphore> imageAvailableSemaphores_;
 		std::vector<VkSemaphore> renderFinishedSemaphores_;
 		std::vector<VkSemaphore> warpFinishedSemaphores_;

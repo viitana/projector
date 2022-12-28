@@ -31,15 +31,14 @@ namespace Projector
             1.0f
         );
 
+        CreateRenderImageResources();
         CreateRenderPass();
+        CreateWarpSampler();
         CreateDescriptorSetLayout();
         CreateDescriptorPool();
         CreateUniformBuffers();
-        CreateRenderImageResources();
-        CreateWarpSampler();
         CreateDescriptorSets();
         CreateGraphicsPipeline();
-        CreateRenderImageResources();
         CreateFramebuffers();
         CreateCommandBuffers();
         CreateSyncObjects();
@@ -632,7 +631,7 @@ namespace Projector
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkAttachmentReference colorAttachmentResolveRef
             {
@@ -745,7 +744,7 @@ namespace Projector
 
             if (vkCreateRenderPass(device_, &renderPassInfo, nullptr, &warpRenderPass_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create render pass!");
+                throw std::runtime_error("failed to create warp render pass!");
             }
         }
     }
@@ -971,8 +970,8 @@ namespace Projector
                 .depthClampEnable = VK_FALSE,
                 .rasterizerDiscardEnable = VK_FALSE,
                 .polygonMode = VK_POLYGON_MODE_FILL,
-                .cullMode = VK_CULL_MODE_BACK_BIT,
-                .frontFace = VK_FRONT_FACE_COUNTER_CLOCKWISE,
+                .cullMode = VK_CULL_MODE_NONE,
+                .frontFace = VK_FRONT_FACE_CLOCKWISE,
                 .depthBiasEnable = VK_FALSE,
                 .depthBiasConstantFactor = 0.0f, // Optional
                 .depthBiasClamp = 0.0f, // Optional
@@ -1121,55 +1120,87 @@ namespace Projector
             Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
             depthImageView_ = Util::CreateImageView(device_, depthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
+        // Warp color image
+        {
+            VkFormat colorFormat = swapChainImageFormat_;
+            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
+            warpColorImageView_ = Util::CreateImageView(device_, warpColorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        }
         // Render result image
         {
-            resultImages_.resize(3);
-            resultImagesMemory_.resize(3);
-            resultImageViews_.resize(3);
-            for (size_t i = 0; i < swapChainImageViews_.size(); i++)
+            /*for (size_t i = 0; i < swapChainImageViews_.size(); i++)*/
             {
                 VkFormat colorFormat = swapChainImageFormat_;
-                Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImages_[i], resultImagesMemory_[i]);
-                Util::TransitionImageLayout(
-                    device_,
-                    commandPool_,
-                    graphicsQueue_,
-                    resultImages_[i],
-                    swapChainImageFormat_,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-                    1
-                );
-                resultImageViews_[i] = Util::CreateImageView(device_, resultImages_[i], colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+                Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT , VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImage_, resultImageMemory_);
+                resultImageView_ = Util::CreateImageView(device_, resultImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+                //Util::TransitionImageLayout(
+                //    device_,
+                //    commandPool_,
+                //    graphicsQueue_,
+                //    resultImage_,
+                //    swapChainImageFormat_,
+                //    VK_IMAGE_LAYOUT_UNDEFINED,
+                //    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                //    1
+                //);
             }
         }
     }
 
     void Projector::CreateFramebuffers()
     {
-        swapChainFramebuffers_.resize(swapChainImageViews_.size());
-        for (size_t i = 0; i < swapChainImageViews_.size(); i++)
         {
-            std::array<VkImageView, 3> attachments =
+            swapChainFramebuffers_.resize(swapChainImageViews_.size());
+            for (size_t i = 0; i < swapChainImageViews_.size(); i++)
             {
-                colorImageView_,
-                depthImageView_,
-                resultImageViews_[i],
-            };
-            VkFramebufferCreateInfo framebufferInfo
-            {
-                .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
-                .renderPass = renderPass_,
-                .attachmentCount = static_cast<uint32_t>(attachments.size()),
-                .pAttachments = attachments.data(),
-                .width = swapChainExtent_.width,
-                .height = swapChainExtent_.height,
-                .layers = 1,
-            };
+                std::array<VkImageView, 3> attachments =
+                {
+                    colorImageView_,
+                    depthImageView_,
+                    resultImageView_,
+                };
+                VkFramebufferCreateInfo framebufferInfo
+                {
+                    .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                    .renderPass = renderPass_,
+                    .attachmentCount = static_cast<uint32_t>(attachments.size()),
+                    .pAttachments = attachments.data(),
+                    .width = swapChainExtent_.width,
+                    .height = swapChainExtent_.height,
+                    .layers = 1,
+                };
 
-            if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &swapChainFramebuffers_[i]) != VK_SUCCESS)
+                if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &swapChainFramebuffers_[i]) != VK_SUCCESS)
+                {
+                    throw std::runtime_error("failed to create framebuffer!");
+                }
+            }
+        }
+        // Warp pass framebuffers
+        {
+            warpFramebuffers_.resize(swapChainImageViews_.size());
+            for (size_t i = 0; i < swapChainImageViews_.size(); i++)
             {
-                throw std::runtime_error("failed to create framebuffer!");
+                std::array<VkImageView, 2> attachments =
+                {
+                    warpColorImageView_,
+                    swapChainImageViews_[i],
+                };
+                VkFramebufferCreateInfo framebufferInfo
+                {
+                    .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
+                    .renderPass = warpRenderPass_,
+                    .attachmentCount = static_cast<uint32_t>(attachments.size()),
+                    .pAttachments = attachments.data(),
+                    .width = swapChainExtent_.width,
+                    .height = swapChainExtent_.height,
+                    .layers = 1,
+                };
+
+                if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &warpFramebuffers_[i]) != VK_SUCCESS)
+                {
+                    throw std::runtime_error("failed to create framebuffer!");
+                }
             }
         }
     }
@@ -1238,6 +1269,7 @@ namespace Projector
 
     void Projector::CreateDescriptorSetLayout()
     {
+        // Main render
         {
             VkDescriptorSetLayoutBinding uboLayoutBinding
             {
@@ -1262,6 +1294,7 @@ namespace Projector
             }
         }
 
+        // Warp
         {
             VkDescriptorSetLayoutBinding warpUboLayoutBinding
             {
@@ -1272,13 +1305,14 @@ namespace Projector
                 .pImmutableSamplers = nullptr, // Optional
             };
 
+            std::array<VkSampler, 1> immutableSamplers = { warpSampler_ };
             VkDescriptorSetLayoutBinding warpSamplerLayoutBinding
             {
                 .binding = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .pImmutableSamplers = nullptr,
+                .pImmutableSamplers = immutableSamplers.data(),
             };
 
             std::array<VkDescriptorSetLayoutBinding, 2> bindings = { warpUboLayoutBinding, warpSamplerLayoutBinding };
@@ -1329,6 +1363,7 @@ namespace Projector
 
     void Projector::CreateDescriptorSets()
     {
+        // Main render descriptor sets
         {
             std::vector<VkDescriptorSetLayout> layouts(MAX_FRAMES_IN_FLIGHT, descriptorSetLayout_);
 
@@ -1394,7 +1429,7 @@ namespace Projector
             {
                 VkDescriptorBufferInfo bufferInfo
                 {
-                    .buffer = uniformBuffers_[i],
+                    .buffer = warpUniformBuffers_[i],
                     .offset = 0,
                     .range = sizeof(UniformBufferObject),
                 };
@@ -1402,7 +1437,7 @@ namespace Projector
                 VkDescriptorImageInfo imageInfo
                 {
                     .sampler = warpSampler_,
-                    .imageView = resultImageViews_[i],
+                    .imageView = resultImageView_,
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 };
 
@@ -1436,19 +1471,39 @@ namespace Projector
 
     void Projector::CreateCommandBuffers()
     {
-        commandBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
-
-        VkCommandBufferAllocateInfo allocInfo
+        // Main draw
         {
-            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
-            .commandPool = commandPool_,
-            .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-            .commandBufferCount = (uint32_t)commandBuffers_.size(),
-        };
+            drawCommandBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
 
-        if (vkAllocateCommandBuffers(device_, &allocInfo, commandBuffers_.data()) != VK_SUCCESS)
+            VkCommandBufferAllocateInfo allocInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .commandPool = commandPool_,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = (uint32_t)drawCommandBuffers_.size(),
+            };
+
+            if (vkAllocateCommandBuffers(device_, &allocInfo, drawCommandBuffers_.data()) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to allocate command buffers!");
+            }
+        }
+        // Warp
         {
-            throw std::runtime_error("failed to allocate command buffers!");
+            warpCommandBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
+
+            VkCommandBufferAllocateInfo allocInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
+                .commandPool = commandPool_,
+                .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
+                .commandBufferCount = (uint32_t)warpCommandBuffers_.size(),
+            };
+
+            if (vkAllocateCommandBuffers(device_, &allocInfo, warpCommandBuffers_.data()) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to allocate warp command buffers!");
+            }
         }
     }
 
@@ -1489,7 +1544,7 @@ namespace Projector
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
 
-        UniformBufferObject ubo
+        UniformBufferObject mainUbo
         {
             .view = glm::translate(
                 glm::rotate(
@@ -1510,9 +1565,31 @@ namespace Projector
                 100.0f
             ),
         };
-        ubo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
+        mainUbo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
+        memcpy(uniformBuffersMapped_[currentImage], &mainUbo, sizeof(mainUbo));
 
-        memcpy(uniformBuffersMapped_[currentImage], &ubo, sizeof(ubo));
+        float sharpness = 20;
+        float flip = 0.5f - 0.5f * glm::cos(0.3f * time) * glm::sqrt(
+            (1 + sharpness * sharpness) /
+            (1 + sharpness * sharpness * glm::pow(glm::cos(0.3f * time), 2))
+        );
+
+        UniformBufferObject warpUbo
+        {
+            .view = glm::lookAt(
+                    glm::vec3(0.3f * glm::sin(time), 0.3f * glm::cos(time), 1.2f),
+                    glm::vec3(0.0f, 0.0f, 0.0f),
+                    glm::vec3(0.0f, 1.0f, 0.0f)
+                ) * glm::rotate(glm::mat4(1.0f), flip * glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+            .proj = glm::perspective(
+                glm::radians(55.0f),
+                swapChainExtent_.width / (float)swapChainExtent_.height,
+                0.1f,
+                100.0f
+            ),
+        };
+        //warpUbo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
+        memcpy(warpUniformBuffersMapped_[currentImage], &warpUbo, sizeof(warpUbo));
     }
 
     void Projector::DrawFrame()
@@ -1540,33 +1617,58 @@ namespace Projector
 
         UpdateUniformBuffer(currentFrame_);
 
-        vkResetCommandBuffer(commandBuffers_[currentFrame_], 0);
-        RecordDraw(commandBuffers_[currentFrame_], imageIndex);
-        RecordWarp(commandBuffers_[currentFrame_], imageIndex);
+        VkSemaphore imageAvailableSemaphore[] = { imageAvailableSemaphores_[currentFrame_] };
+        VkPipelineStageFlags imageAvailableStage[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        VkSemaphore renderFinishedSemaphore[] = { renderFinishedSemaphores_[currentFrame_] };
+        VkPipelineStageFlags renderFinishedStage[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        VkSemaphore warpFinishedSemaphore[] = { warpFinishedSemaphores_[currentFrame_] };
 
-        VkSemaphore imageAvailableSemaphores[] = { imageAvailableSemaphores_[currentFrame_] };
-        VkPipelineStageFlags waitImageStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore renderFinishedSemaphores[] = { renderFinishedSemaphores_[currentFrame_] };
-
-        //VkSemaphore waitSemaphores2[] = { renderFinishedSemaphores_[currentFrame_] };
-        //VkPipelineStageFlags waitStages2[] = { VK_PIPELINE_STAGE_ALL_COMMANDS_BIT };
-        //VkSemaphore signalSemaphores2[] = { warpFinishedSemaphores_[currentFrame_] };
-
-        VkSubmitInfo submitInfo
+        // Main render record & submit
         {
-            .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-            .waitSemaphoreCount = 1,
-            .pWaitSemaphores = imageAvailableSemaphores,
-            .pWaitDstStageMask = waitImageStages,
-            .commandBufferCount = 1,
-            .pCommandBuffers = &commandBuffers_[currentFrame_],
-            .signalSemaphoreCount = 1,
-            .pSignalSemaphores = renderFinishedSemaphores,
-        };
+            vkResetCommandBuffer(drawCommandBuffers_[currentFrame_], 0);
+            RecordDraw(drawCommandBuffers_[currentFrame_], imageIndex);
 
-        if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[currentFrame_]) != VK_SUCCESS)
+            VkSubmitInfo submitInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .waitSemaphoreCount = 1,
+                .pWaitSemaphores = imageAvailableSemaphore,
+                .pWaitDstStageMask = imageAvailableStage,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &drawCommandBuffers_[currentFrame_],
+                .signalSemaphoreCount = 1,
+                .pSignalSemaphores = renderFinishedSemaphore,
+            };
+
+            if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to submit draw command buffer!");
+            }
+        }
+
+        vkQueueWaitIdle(graphicsQueue_);
+
+        // Warp record & submit
         {
-            throw std::runtime_error("failed to submit draw command buffer!");
+            vkResetCommandBuffer(warpCommandBuffers_[currentFrame_], 0);
+            RecordWarp(warpCommandBuffers_[currentFrame_], imageIndex);
+
+            VkSubmitInfo submitInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .waitSemaphoreCount = 1,
+                .pWaitSemaphores = renderFinishedSemaphore,
+                .pWaitDstStageMask = renderFinishedStage,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &warpCommandBuffers_[currentFrame_],
+                .signalSemaphoreCount = 1,
+                .pSignalSemaphores = warpFinishedSemaphore,
+            };
+
+            if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[currentFrame_]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to submit draw command buffer!");
+            }
         }
 
         VkSwapchainKHR swapChains[] = { swapChain_ };
@@ -1574,7 +1676,7 @@ namespace Projector
         {
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = renderFinishedSemaphores,
+            .pWaitSemaphores = warpFinishedSemaphore,
             .swapchainCount = 1,
             .pSwapchains = swapChains,
             .pImageIndices = &imageIndex,
@@ -1621,14 +1723,8 @@ namespace Projector
 
         std::array<VkClearValue, 2> clearValues
         {
-            VkClearValue
-            {
-                .color = { {0.0f, 0.0f, 0.0f, 1.0f} },
-            },
-            VkClearValue
-            {
-                .depthStencil = {.depth = 1.0f, .stencil = 0 },
-            },
+            VkClearValue { .color = {{0.0f, 0.0f, 0.0f, 1.0f}} },
+            VkClearValue { .depthStencil = {.depth = 1.0f, .stencil = 0 } },
         };
 
         VkRenderPassBeginInfo renderPassInfo
@@ -1695,73 +1791,140 @@ namespace Projector
 
         vkCmdEndRenderPass(commandBuffer);
 
-        //if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
-        //{
-        //    throw std::runtime_error("failed to record command buffer!");
-        //}
+        if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to record command buffer!");
+        }
     }
 
     void Projector::RecordWarp(VkCommandBuffer commandBuffer, uint32_t imageIndex) const
     {
-        static bool firstFrame = true;
+        VkCommandBufferBeginInfo beginInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
+            .flags = 0, // Optional
+            .pInheritanceInfo = nullptr, // Optional
+        };
 
-        //VkCommandBufferBeginInfo beginInfo
-        //{
-        //    .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_BEGIN_INFO,
-        //    .flags = 0, // Optional
-        //    .pInheritanceInfo = nullptr, // Optional
-        //};
+        if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to begin recording awrp command buffer!");
+        }
 
-        //if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
-        //{
-        //    throw std::runtime_error("failed to begin recording command buffer!");
-        //}
+        //Util::TransitionImageLayout(
+        //    device_,
+        //    commandPool_,
+        //    graphicsQueue_,
+        //    resultImage_,
+        //    swapChainImageFormat_,
+        //    VK_IMAGE_LAYOUT_UNDEFINED,
+        //    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+        //    1,
+        //    commandBuffer
+        //);
 
-        Util::TransitionImageLayout(
-            device_,
-            commandPool_,
-            graphicsQueue_,
-            swapChainImages_[imageIndex],
-            swapChainImageFormat_,
-            VK_IMAGE_LAYOUT_UNDEFINED,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+
+        //Util::TransitionImageLayout(
+        //    device_,
+        //    commandPool_,
+        //    graphicsQueue_,
+        //    swapChainImages_[imageIndex],
+        //    swapChainImageFormat_,
+        //    VK_IMAGE_LAYOUT_UNDEFINED,
+        //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        //    1,
+        //    commandBuffer
+        //);
+        //Util::CopyImageToImage(
+        //    device_,
+        //    commandPool_,
+        //    graphicsQueue_,
+        //    resultImages_[currentFrame_],
+        //    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
+        //    swapChainImages_[imageIndex],
+        //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        //    swapChainExtent_.width,
+        //    swapChainExtent_.height,
+        //    commandBuffer
+        //);
+        //Util::TransitionImageLayout(
+        //    device_,
+        //    commandPool_,
+        //    graphicsQueue_,
+        //    swapChainImages_[imageIndex],
+        //    swapChainImageFormat_,
+        //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+        //    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
+        //    1,
+        //    commandBuffer
+        //);
+
+        std::array<VkClearValue, 2> clearValues
+        {
+            VkClearValue {.color = {{0.0f, 0.0f, 0.0f, 1.0f}} },
+            VkClearValue {.depthStencil = {.depth = 1.0f, .stencil = 0 } },
+        };
+
+        VkRenderPassBeginInfo renderPassInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
+            .renderPass = warpRenderPass_,
+            .framebuffer = warpFramebuffers_[imageIndex],
+            .renderArea = VkRect2D
+            {
+                .offset = { 0, 0 },
+                .extent = swapChainExtent_,
+            },
+            .clearValueCount = static_cast<uint32_t>(clearValues.size()),
+            .pClearValues = clearValues.data(),
+        };
+
+        vkCmdBeginRenderPass(commandBuffer, &renderPassInfo, VK_SUBPASS_CONTENTS_INLINE);
+        vkCmdBindPipeline(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, warpGraphicsPipeline_);
+
+        vkCmdBindDescriptorSets(
+            commandBuffer,
+            VK_PIPELINE_BIND_POINT_GRAPHICS,
+            warpPipelineLayout_,
+            0,
             1,
-            commandBuffer
+            &warpDescriptorSets_[currentFrame_],
+            0,
+            nullptr
         );
-        Util::CopyImageToImage(
-            device_,
-            commandPool_,
-            graphicsQueue_,
-            resultImages_[currentFrame_],
-            VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-            swapChainImages_[imageIndex],
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            swapChainExtent_.width,
-            swapChainExtent_.height,
-            commandBuffer
-        );
-        Util::TransitionImageLayout(
-            device_,
-            commandPool_,
-            graphicsQueue_,
-            swapChainImages_[imageIndex],
-            swapChainImageFormat_,
-            VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-            VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-            1,
-            commandBuffer
-        );
+
+        VkViewport viewport
+        {
+            .x = 0.0f,
+            .y = 0.0f,
+            .width = static_cast<float>(swapChainExtent_.width),
+            .height = static_cast<float>(swapChainExtent_.height),
+            .minDepth = 0.0f,
+            .maxDepth = 1.0f,
+        };
+        vkCmdSetViewport(commandBuffer, 0, 1, &viewport);
+
+        VkRect2D scissor
+        {
+            .offset = { 0, 0 },
+            .extent = swapChainExtent_,
+        };
+        vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
+
+        vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+
+        vkCmdEndRenderPass(commandBuffer);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to record command buffer!");
         }
-
-        firstFrame = false;
     }
 
     void Projector::RecreateSwapChain()
     {
+        std::cout << "Recreating swapchain" << std::endl;
+
         int width = 0, height = 0;
         glfwGetFramebufferSize(window_, &width, &height);
         while (width == 0 || height == 0)
