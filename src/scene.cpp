@@ -30,15 +30,12 @@ namespace Scene
 			vkDestroyImage(device, image, nullptr);
 			vkFreeMemory(device, deviceMemory, nullptr);
 			vkDestroySampler(device, sampler, nullptr);
+            std::cout << "Destroyed GPU texture '" << uri << "'" << std::endl;
 		}
-        else
-        {
-            std::cout << "SKIPPING NIL TEXTURE NUKE" << std::endl;
-        }
 	}
 
 	Texture::Texture(tinygltf::Image& gltfimage, const std::string path, const VkPhysicalDevice& physicalDevice, const VkDevice& d, const VkCommandPool& commandPool, const VkQueue& copyQueue, const VkDescriptorPool& descriptorSetPool)
-		: device(d)
+		: device(d) , uri(gltfimage.uri)
     {
         // Check if image points to an external ktx file
         bool isKtx = false;
@@ -205,11 +202,11 @@ namespace Scene
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
 
-        std::cout << "Loaded texture image '" << path << "' with dimensions " << width << 'x' << height << std::endl;
+        std::cout << "Created glTF GPU texture '" << uri << "' [" << width << 'x' << height << "]" << std::endl;
     }
 
     Texture::Texture(const std::string path, const VkPhysicalDevice& physicalDevice, const VkDevice& d, const VkCommandPool& commandPool, const VkQueue& copyQueue, const VkDescriptorPool& descriptorSetPool)
-        : device(d)
+        : device(d), uri(path)
     {
         int texWidth, texHeight, texChannels;
 
@@ -223,7 +220,6 @@ namespace Scene
         height = texHeight;
 
         VkDeviceSize imageSize = texWidth * texHeight * 4;
-        std::cout << "Loaded texture image '" << path << "' with dimensions " << texWidth << 'x' << texHeight << std::endl;
 
         mipLevels = static_cast<uint32_t>(std::floor(std::log2(std::max(texWidth, texHeight)))) + 1;
 
@@ -278,16 +274,18 @@ namespace Scene
             .imageView = view,
             .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
         };
+
+        std::cout << "Created GPU texture '" << uri << "' [" << width << 'x' << height << "]" << std::endl;
     }
 
     Texture::~Texture()
     {
-        std::cout << "NUKING TEXTURE" << std::endl;
         Destroy();
     }
 
     Texture::Texture(Texture&& other) noexcept
         : device(std::exchange(other.device, {}))
+        , uri(std::exchange(other.uri, {}))
         , image(std::exchange(other.image, {}))
         , deviceMemory(std::exchange(other.deviceMemory, {}))
         , view(std::exchange(other.view, {}))
@@ -297,7 +295,6 @@ namespace Scene
         , descriptor(std::exchange(other.descriptor, {}))
         , sampler(std::exchange(other.sampler, {}))
     {
-        std::cout << "MOVING TEXTURE" << std::endl;
     }
 
     //Texture& Texture::operator=(Texture&& other) noexcept
@@ -367,8 +364,6 @@ namespace Scene
             }
             vkUpdateDescriptorSets(device, static_cast<uint32_t>(writeDescriptorSets.size()), writeDescriptorSets.data(), 0, nullptr);
         }
-
-        std::cout << "Created image sampler descriptor sets for base color texture" << std::endl;
     }
 
     Mesh::Mesh(const VkPhysicalDevice& pd, const VkDevice& d, const glm::mat4 matrix)
@@ -394,7 +389,6 @@ namespace Scene
 
     Mesh::~Mesh()
     {
-        std::cout << "NUKING MESH" << std::endl;
         vkDestroyBuffer(device, uniformBuffer.buffer, nullptr);
         vkFreeMemory(device, uniformBuffer.memory, nullptr);
         for (auto primitive : primitives)
@@ -426,7 +420,6 @@ namespace Scene
         {
             mesh->uniformBlock.matrix = GetMatrix();
             memcpy(mesh->uniformBuffer.mapped, &mesh->uniformBlock, sizeof(mesh->uniformBlock));
-            // ubo.proj * ubo.view * ubo.model * vec4(inPosition, 1.0)
 
             //if (skin)
             //{
@@ -456,7 +449,6 @@ namespace Scene
 
     Node::~Node()
     {
-        std::cout << "NUKING NODE" << std::endl;
         if (mesh)
         {
             delete mesh;
@@ -543,8 +535,6 @@ namespace Scene
 
     Model::~Model()
     {
-        std::cout << "NUKING MODEL" << std::endl;
-
         vkDestroyBuffer(device_, vertices.buffer, nullptr);
         vkFreeMemory(device_, vertices.memory, nullptr);
         vkDestroyBuffer(device_, indices.buffer, nullptr);
@@ -817,7 +807,7 @@ namespace Scene
             textures.emplace_back(Texture(image, path, physicalDevice_, device_, commandPool_, transferQueue_, descriptorPool_));
         }
         // Create an empty texture to be used for empty material images
-        emptyTexture_ = new Texture("../res/empty.bmp", physicalDevice_, device_, commandPool_, transferQueue_, descriptorPool_);
+        emptyTexture_ = new Texture("res/empty.bmp", physicalDevice_, device_, commandPool_, transferQueue_, descriptorPool_);
     }
 
     void Model::LoadMaterials(tinygltf::Model& gltfModel)

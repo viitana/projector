@@ -4,6 +4,8 @@
 #include <fstream>
 #include <iostream>
 
+#include <glm/gtx/projection.hpp>
+
 namespace Util
 {
     const std::vector<char> ReadFile(const std::string& filename)
@@ -469,4 +471,13 @@ namespace Util
 
         vkFreeCommandBuffers(device, commandPool, 1, &commandBuffer);
     }
+
+    //glm::quat TwistDecompose(glm::quat rotation, glm::vec3 direction)
+    //{
+    //    //glm::vec3 ra(rotation.x, rotation.y, rotation.z); // rotation axis
+    //    //glm::vec3 p = glm::proj(ra, direction); 
+    //    //glm::quat twist = glm::quat(p.x, p.y, p.z, rotation.w);
+    //    //return glm::normalize(twist);
+    //    return glm::quat();
+    //}
 }

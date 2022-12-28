@@ -1,8 +1,19 @@
 #include "projector.hpp"
 
 #include <stb_image.h>
+#include <glm/gtc/quaternion.hpp>
+#include <glm/gtx/projection.hpp>
 
 #include "scene.hpp"
+
+glm::quat TwistDecompose(glm::quat rotation, glm::vec3 direction)
+{
+    glm::vec3 ra(rotation.x, rotation.y, rotation.z); // rotation axis
+    glm::vec3 p = glm::proj(ra, direction); 
+    glm::quat twist = glm::quat(p.x, p.y, p.z, rotation.w);
+    return glm::normalize(twist);
+    //return glm::quat();
+}
 
 namespace Projector
 {
@@ -15,6 +26,7 @@ namespace Projector
 
         CreateInstance();
         CreateSurface();
+
         PickPhysicalDevice();
         CreateLogicalDevice();
         CreateSwapChain();
@@ -22,8 +34,10 @@ namespace Projector
 
         CreateCommandPool();
 
+        Input::InputHandler::Init(window_);
+
         scene_ = new Scene::Model(
-            "../res/sponza/Sponza.gltf",
+            "res/sponza/Sponza.gltf",
             physicalDevice_,
             device_,
             commandPool_,
@@ -33,11 +47,11 @@ namespace Projector
 
         CreateRenderPass();
         CreateDescriptorSetLayout();
-        CreateDescriptorPool();
         CreateGraphicsPipeline();
         CreateRenderImageResources();
         CreateWarpSampler();
         CreateUniformBuffers();
+        CreateDescriptorPool();
         CreateDescriptorSets();
         CreateFramebuffers();
         CreateCommandBuffers();
@@ -52,15 +66,15 @@ namespace Projector
 
         vkDestroyPipeline(device_, graphicsPipeline_, nullptr);
         vkDestroyPipelineLayout(device_, pipelineLayout_, nullptr);
+        vkDestroyPipeline(device_, warpGraphicsPipeline_, nullptr);
+        vkDestroyPipelineLayout(device_, warpPipelineLayout_, nullptr);
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
             vkDestroyBuffer(device_, uniformBuffers_[i], nullptr);
             vkFreeMemory(device_, uniformBuffersMemory_[i], nullptr);
+            vkDestroyBuffer(device_, warpUniformBuffers_[i], nullptr);
+            vkFreeMemory(device_, warpUniformBuffersMemory_[i], nullptr);
         }
-
-        vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
-        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
-        vkDestroyRenderPass(device_, renderPass_, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
@@ -149,8 +163,10 @@ namespace Projector
 
     const VkPresentModeKHR Projector::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const
     {
-        for (const auto& availablePresentMode : availablePresentModes) {
-            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR) {
+        for (const auto& availablePresentMode : availablePresentModes)
+        {
+            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+            {
                 return availablePresentMode;
             }
         }
@@ -208,27 +224,15 @@ namespace Projector
     {
         uint32_t queueFamilyCount = 0;
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-
         std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
         vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
 
-        for (auto& q_family : queueFamilies)
-        {
-            std::cout << "Queue number: " << q_family.queueCount << std::endl;
-            std::cout << "\tQueue flags: " << q_family.queueFlags << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) std::cout << "\t VK_QUEUE_GRAPHICS_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_COMPUTE_BIT) std::cout << "\t VK_QUEUE_COMPUTE_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_TRANSFER_BIT) std::cout << "\t VK_QUEUE_TRANSFER_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) std::cout << "\t VK_QUEUE_SPARSE_BINDING_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_PROTECTED_BIT) std::cout << "\t VK_QUEUE_PROTECTED_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) std::cout << "\t VK_QUEUE_OPTICAL_FLOW_BIT_NV" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_FLAG_BITS_MAX_ENUM) std::cout << "\t VK_QUEUE_FLAG_BITS_MAX_ENUM" << std::endl;
-        }
-
         QueueFamilyIndices indices;
         int i = 0;
-        for (const auto& queueFamily : queueFamilies) {
-            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT) {
+        for (const auto& queueFamily : queueFamilies)
+        {
+            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
+            {
                 indices.graphicsFamily = i;
             }
             VkBool32 presentSupport = false;
@@ -242,11 +246,45 @@ namespace Projector
         return indices;
     }
 
+    void Projector::ListDeviceDetails(VkPhysicalDevice device) const
+    {
+        uint32_t queueFamilyCount = 0;
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
+        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
+        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
+
+        std::cout << "    Max MSAA sample count:  " << GetMaxUsableSampleCount(device) << std::endl;
+
+        std::cout << "    Queues:" << std::endl;
+        for (auto& q_family : queueFamilies)
+        {
+            std::cout << "    - Count: " << q_family.queueCount << std::endl;
+            std::cout << "      Flags:" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) std::cout << "        VK_QUEUE_GRAPHICS_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_COMPUTE_BIT) std::cout << "        VK_QUEUE_COMPUTE_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_TRANSFER_BIT) std::cout << "        VK_QUEUE_TRANSFER_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) std::cout << "        VK_QUEUE_SPARSE_BINDING_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_PROTECTED_BIT) std::cout << "        VK_QUEUE_PROTECTED_BIT" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) std::cout << "        VK_QUEUE_OPTICAL_FLOW_BIT_NV" << std::endl;
+            if (q_family.queueFlags & VK_QUEUE_FLAG_BITS_MAX_ENUM) std::cout << "        VK_QUEUE_FLAG_BITS_MAX_ENUM" << std::endl;
+        }
+
+        uint32_t extensionCount;
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
+        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
+        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
+
+        std::cout << "    Available extensions: " << extensionCount << std::endl;
+        for (const auto& extension : availableExtensions)
+        {
+            std::cout << "      " << extension.extensionName << std::endl;
+        }
+    }
+
     const bool Projector::CheckDeviceExtensionSupport(VkPhysicalDevice device) const
     {
         uint32_t extensionCount;
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-
         std::vector<VkExtensionProperties> availableExtensions(extensionCount);
         vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
 
@@ -334,10 +372,10 @@ namespace Projector
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
     }
 
-    const VkSampleCountFlagBits Projector::GetMaxUsableSampleCount() const
+    const VkSampleCountFlagBits Projector::GetMaxUsableSampleCount(VkPhysicalDevice device) const
     {
         VkPhysicalDeviceProperties physicalDeviceProperties;
-        vkGetPhysicalDeviceProperties(physicalDevice_, &physicalDeviceProperties);
+        vkGetPhysicalDeviceProperties(device, &physicalDeviceProperties);
 
         VkSampleCountFlags counts =
             physicalDeviceProperties.limits.framebufferColorSampleCounts &
@@ -384,23 +422,6 @@ namespace Projector
             .ppEnabledExtensionNames = glfwExtensions,
         };
 
-        uint32_t extensionCount = 0;
-        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> extensions(extensionCount);
-        vkEnumerateInstanceExtensionProperties(nullptr, &extensionCount, extensions.data());
-
-        std::cout << "Required extensions: " << glfwExtensionCount << '\n';
-        for (int i = 0; i < glfwExtensionCount; i++)
-        {
-            std::cout << '\t' << glfwExtensions[i] << '\n';
-        }
-
-        std::cout << "Available extensions: " << extensionCount << '\n';
-        for (const auto& extension : extensions)
-        {
-            std::cout << '\t' << extension.extensionName << '\n';
-        }
-
         if (vkCreateInstance(&createInfo, nullptr, &vk_) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create instance!");
@@ -413,7 +434,7 @@ namespace Projector
         //const GLFWvidmode* mode = glfwGetVideoMode(monitor);
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-        window_ = glfwCreateWindow(1024, 768, "projector", nullptr, nullptr);
+        window_ = glfwCreateWindow(1920, 1080, "projector", nullptr, nullptr);
         // window_ = glfwCreateWindow(1920, 1080, "projector", nullptr, nullptr);
         if (window_ == nullptr)
         {
@@ -438,22 +459,37 @@ namespace Projector
             throw std::runtime_error("failed to find GPUs with Vulkan support!");
         }
 
+        uint32_t glfwExtensionCount = 0;
+        const char** glfwExtensions;
+        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
+        std::cout << "Required extensions: " << glfwExtensionCount << std::endl;
+        for (int i = 0; i < glfwExtensionCount; i++)
+        {
+            std::cout << "  " << glfwExtensions[i] << std::endl;
+        }
+
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(vk_, &deviceCount, devices.data());
 
         std::string deviceName = "Unknown";
-        std::cout << "Available devices: " << deviceCount << '\n';
+        std::cout << "Available devices: " << deviceCount << std::endl;
         for (const auto& device : devices)
         {
             VkPhysicalDeviceProperties deviceProperties;
             vkGetPhysicalDeviceProperties(device, &deviceProperties);
-            std::cout << '\t' << deviceProperties.deviceName << '\n';
+            std::cout << "  " << deviceProperties.deviceName << ":" << std::endl;
+            ListDeviceDetails(device);
+        }
 
+        for (const auto& device : devices)
+        {
             if (IsDeviceSuitable(device))
             {
+                VkPhysicalDeviceProperties deviceProperties;
+                vkGetPhysicalDeviceProperties(device, &deviceProperties);
+
                 physicalDevice_ = device;
-                msaaSamples_ = GetMaxUsableSampleCount();
-                std::cout << "Max MSAA sample count:  " << msaaSamples_ << "\n";
+                msaaSamples_ = GetMaxUsableSampleCount(device);
                 deviceName = deviceProperties.deviceName;
                 break;
             }
@@ -463,7 +499,7 @@ namespace Projector
         {
             throw std::runtime_error("failed to find a suitable GPU!");
         }
-        std::cout << "Picked device \"" << deviceName << "\"\n";
+        std::cout << "Picked device \"" << deviceName << "\"" << std::endl;
     }
 
     void Projector::CreateLogicalDevice()
@@ -752,8 +788,8 @@ namespace Projector
     void Projector::CreateGraphicsPipeline()
     {
         {
-            std::vector<char> vertShaderCode = Util::ReadFile("./shaders/vert.spv");
-            std::vector<char> fragShaderCode = Util::ReadFile("./shaders/frag.spv");
+            std::vector<char> vertShaderCode = Util::ReadFile("src/shaders/vert.spv");
+            std::vector<char> fragShaderCode = Util::ReadFile("src/shaders/frag.spv");
 
             VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
             VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
@@ -920,8 +956,8 @@ namespace Projector
 
         // Warp pipeline
         {
-            std::vector<char> vertShaderCode = Util::ReadFile("./shaders/warp_vert.spv");
-            std::vector<char> fragShaderCode = Util::ReadFile("./shaders/warp_frag.spv");
+            std::vector<char> vertShaderCode = Util::ReadFile("src/shaders/warp_vert.spv");
+            std::vector<char> fragShaderCode = Util::ReadFile("src/shaders/warp_frag.spv");
 
             VkShaderModule vertShaderModule = CreateShaderModule(vertShaderCode);
             VkShaderModule fragShaderModule = CreateShaderModule(fragShaderCode);
@@ -1539,24 +1575,43 @@ namespace Projector
     void Projector::UpdateUniformBuffer(uint32_t currentImage)
     {
         static auto startTime = std::chrono::high_resolution_clock::now();
+        static auto lastTime = std::chrono::high_resolution_clock::now();
 
         auto currentTime = std::chrono::high_resolution_clock::now();
         float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+        float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastTime).count();
+        lastTime = std::chrono::high_resolution_clock::now();
+
+        Input::UserInput input = Input::InputHandler::GetInput(deltaTime);
+        
+        glm::quat pitch = TwistDecompose(player_.rotation, glm::vec3(0,1,0));
+
+        glm::vec3 relativeMovement =
+            glm::mat4(pitch) *
+            glm::vec4(-input.moveDelta.x, 0, input.moveDelta.y, 0);
+        player_.position += relativeMovement;
+        player_.rotation = player_.rotation * glm::quat(glm::vec3(input.mouseDelta.y, 0, 0));
+        player_.rotation = glm::quat(glm::vec3(0, input.mouseDelta.x, 0)) * player_.rotation;
 
         UniformBufferObject mainUbo
         {
-            .view = glm::translate(
-                glm::rotate(
-                    glm::lookAt(
-                        glm::vec3(1.0f, 1.0f, 0.0f),
-                        glm::vec3(0.0f, 0.0f, 0.0f),
-                        glm::vec3(0.0f, 1.0f, 0.0f)
-                    ),
-                    time * glm::radians(45.0f),
-                    glm::vec3(0.0f, 1.0f, 0.0f)
-                ),
-                glm::vec3(0.0f, -2.0f, 0.0f)
+            .view = glm::lookAt(
+                glm::vec3(0, 1.2f, 0) + player_.position,
+                glm::vec3(0, 1.2f, 0) + player_.position + glm::vec3(glm::mat4(player_.rotation) * glm::vec4(0, 0, 1, 0)),
+                glm::vec3(0.0f, 1.0f, 0.0f)
             ),
+            //.view = glm::translate(
+            //    glm::rotate(
+            //        glm::lookAt(
+            //            glm::vec3(1.0f, 1.0f, 0.0f),
+            //            glm::vec3(0.0f, 0.0f, 0.0f),
+            //            glm::vec3(0.0f, 1.0f, 0.0f)
+            //        ),
+            //        time * glm::radians(45.0f),
+            //        glm::vec3(0.0f, 1.0f, 0.0f)
+            //    ),
+            //    glm::vec3(0.0f, -2.0f, 0.0f)
+            //),
             .proj = glm::perspective(
                 glm::radians(75.0f),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
@@ -1575,11 +1630,16 @@ namespace Projector
 
         UniformBufferObject warpUbo
         {
+            //.view = glm::lookAt(
+            //    glm::vec3(0,0,1.3f),
+            //    glm::vec3(0,0,1.3f) + glm::vec3(glm::mat4(player_.rotation) * glm::vec4(0, 0, -1, 0)),
+            //    glm::vec3(0.0f, 1.0f, 0.0f)
+            //),
             .view = glm::lookAt(
                     glm::vec3(0.3f * glm::sin(time), 0.3f * glm::cos(time), 1.2f),
                     glm::vec3(0.0f, 0.0f, 0.0f),
                     glm::vec3(0.0f, 1.0f, 0.0f)
-                ) * glm::rotate(glm::mat4(1.0f), flip * glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                ) * glm::rotate(glm::mat4(1.0f), /*flip **/ glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
             .proj = glm::perspective(
                 glm::radians(55.0f),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
@@ -1587,7 +1647,6 @@ namespace Projector
                 100.0f
             ),
         };
-        //warpUbo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
         memcpy(warpUniformBuffersMapped_[currentImage], &warpUbo, sizeof(warpUbo));
     }
 
@@ -1761,15 +1820,6 @@ namespace Projector
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        // VkBuffer vertexBuffers[] = { objects_[objectIndex_].GetVertexBuffer() };
-        // VkDeviceSize offsets[] = { 0 };
-        //vkCmdBindVertexBuffers(commandBuffer, 0, 1, vertexBuffers, offsets);
-
-        //vkCmdBindIndexBuffer(commandBuffer, objects_[objectIndex_].GetIndexBuffer(), 0, VK_INDEX_TYPE_UINT32);
-        //vkCmdBindDescriptorSets(commandBuffer, VK_PIPELINE_BIND_POINT_GRAPHICS, pipelineLayout_, 0, 1, objects_[objectIndex_].GetDescriptorSet(currentFrame_), 0, nullptr);
-
-        //vkCmdDrawIndexed(commandBuffer, objects_[objectIndex_].GetIndicesCount(), 1, 0, 0, 0);
-
         vkCmdBindDescriptorSets(
             commandBuffer,
             VK_PIPELINE_BIND_POINT_GRAPHICS,
@@ -1809,54 +1859,6 @@ namespace Projector
         {
             throw std::runtime_error("failed to begin recording awrp command buffer!");
         }
-
-        //Util::TransitionImageLayout(
-        //    device_,
-        //    commandPool_,
-        //    graphicsQueue_,
-        //    resultImage_,
-        //    swapChainImageFormat_,
-        //    VK_IMAGE_LAYOUT_UNDEFINED,
-        //    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-        //    1,
-        //    commandBuffer
-        //);
-
-
-        //Util::TransitionImageLayout(
-        //    device_,
-        //    commandPool_,
-        //    graphicsQueue_,
-        //    swapChainImages_[imageIndex],
-        //    swapChainImageFormat_,
-        //    VK_IMAGE_LAYOUT_UNDEFINED,
-        //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        //    1,
-        //    commandBuffer
-        //);
-        //Util::CopyImageToImage(
-        //    device_,
-        //    commandPool_,
-        //    graphicsQueue_,
-        //    resultImages_[currentFrame_],
-        //    VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL,
-        //    swapChainImages_[imageIndex],
-        //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        //    swapChainExtent_.width,
-        //    swapChainExtent_.height,
-        //    commandBuffer
-        //);
-        //Util::TransitionImageLayout(
-        //    device_,
-        //    commandPool_,
-        //    graphicsQueue_,
-        //    swapChainImages_[imageIndex],
-        //    swapChainImageFormat_,
-        //    VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
-        //    VK_IMAGE_LAYOUT_PRESENT_SRC_KHR,
-        //    1,
-        //    commandBuffer
-        //);
 
         std::array<VkClearValue, 2> clearValues
         {
@@ -1934,15 +1936,14 @@ namespace Projector
 
         vkDeviceWaitIdle(device_);
         CleanupSwapChain();
-        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
 
         CreateSwapChain();
         CreateImageViews();
         CreateRenderPass();
         CreateDescriptorSetLayout();
-        CreateDescriptorPool();
         CreateRenderImageResources();
         CreateWarpSampler();
+        CreateDescriptorPool();
         CreateDescriptorSets();
         CreateFramebuffers();
     }
@@ -1957,13 +1958,32 @@ namespace Projector
         vkDestroyImage(device_, depthImage_, nullptr);
         vkFreeMemory(device_, depthImageMemory_, nullptr);
 
+        vkDestroyImageView(device_, warpColorImageView_, nullptr);
+        vkDestroyImage(device_, warpColorImage_, nullptr);
+        vkFreeMemory(device_, warpColorImageMemory_, nullptr);
+
+        vkDestroyImageView(device_, resultImageView_, nullptr);
+        vkDestroyImage(device_, resultImage_, nullptr);
+        vkFreeMemory(device_, resultImageMemory_, nullptr);
+
+        vkDestroySampler(device_, warpSampler_, nullptr);
+
+        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
+
+        vkDestroyDescriptorSetLayout(device_, descriptorSetLayout_, nullptr);
+        vkDestroyDescriptorSetLayout(device_, warpDescriptorSetLayout_, nullptr);
+
+        vkDestroyRenderPass(device_, renderPass_, nullptr);
+        vkDestroyRenderPass(device_, warpRenderPass_, nullptr);
+
         for (size_t i = 0; i < swapChainFramebuffers_.size(); i++)
         {
             vkDestroyFramebuffer(device_, swapChainFramebuffers_[i], nullptr);
+            vkDestroyFramebuffer(device_, warpFramebuffers_[i], nullptr);
+            vkDestroyImageView(device_, swapChainImageViews_[i], nullptr);
         }
         for (size_t i = 0; i < swapChainImageViews_.size(); i++)
         {
-            vkDestroyImageView(device_, swapChainImageViews_[i], nullptr);
         }
         vkDestroySwapchainKHR(device_, swapChain_, nullptr);
     }
