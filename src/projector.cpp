@@ -31,14 +31,14 @@ namespace Projector
             1.0f
         );
 
-        CreateRenderImageResources();
         CreateRenderPass();
-        CreateWarpSampler();
         CreateDescriptorSetLayout();
         CreateDescriptorPool();
+        CreateGraphicsPipeline();
+        CreateRenderImageResources();
+        CreateWarpSampler();
         CreateUniformBuffers();
         CreateDescriptorSets();
-        CreateGraphicsPipeline();
         CreateFramebuffers();
         CreateCommandBuffers();
         CreateSyncObjects();
@@ -1305,14 +1305,13 @@ namespace Projector
                 .pImmutableSamplers = nullptr, // Optional
             };
 
-            std::array<VkSampler, 1> immutableSamplers = { warpSampler_ };
             VkDescriptorSetLayoutBinding warpSamplerLayoutBinding
             {
                 .binding = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
                 .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
-                .pImmutableSamplers = immutableSamplers.data(),
+                .pImmutableSamplers = nullptr,
             };
 
             std::array<VkDescriptorSetLayoutBinding, 2> bindings = { warpUboLayoutBinding, warpSamplerLayoutBinding };
@@ -1935,10 +1934,16 @@ namespace Projector
 
         vkDeviceWaitIdle(device_);
         CleanupSwapChain();
+        vkDestroyDescriptorPool(device_, descriptorPool_, nullptr);
 
         CreateSwapChain();
         CreateImageViews();
+        CreateRenderPass();
+        CreateDescriptorSetLayout();
+        CreateDescriptorPool();
         CreateRenderImageResources();
+        CreateWarpSampler();
+        CreateDescriptorSets();
         CreateFramebuffers();
     }
 
