@@ -1163,30 +1163,17 @@ namespace Projector
         }
         // Render result image
         {
-            /*for (size_t i = 0; i < swapChainImageViews_.size(); i++)*/
-            {
-                VkFormat colorFormat = swapChainImageFormat_;
-                Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT , VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImage_, resultImageMemory_);
-                resultImageView_ = Util::CreateImageView(device_, resultImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-                //Util::TransitionImageLayout(
-                //    device_,
-                //    commandPool_,
-                //    graphicsQueue_,
-                //    resultImage_,
-                //    swapChainImageFormat_,
-                //    VK_IMAGE_LAYOUT_UNDEFINED,
-                //    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                //    1
-                //);
-            }
+            VkFormat colorFormat = swapChainImageFormat_;
+            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT , VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImage_, resultImageMemory_);
+            resultImageView_ = Util::CreateImageView(device_, resultImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
     void Projector::CreateFramebuffers()
     {
         {
-            swapChainFramebuffers_.resize(swapChainImageViews_.size());
-            for (size_t i = 0; i < swapChainImageViews_.size(); i++)
+            mainFramebuffers_.resize(MAX_FRAMES_IN_FLIGHT);
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
                 std::array<VkImageView, 3> attachments =
                 {
@@ -1205,7 +1192,7 @@ namespace Projector
                     .layers = 1,
                 };
 
-                if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &swapChainFramebuffers_[i]) != VK_SUCCESS)
+                if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &mainFramebuffers_[i]) != VK_SUCCESS)
                 {
                     throw std::runtime_error("failed to create framebuffer!");
                 }
@@ -1213,8 +1200,8 @@ namespace Projector
         }
         // Warp pass framebuffers
         {
-            warpFramebuffers_.resize(swapChainImageViews_.size());
-            for (size_t i = 0; i < swapChainImageViews_.size(); i++)
+            warpFramebuffers_.resize(swapChainImages_.size());
+            for (size_t i = 0; i < swapChainImages_.size(); i++)
             {
                 std::array<VkImageView, 2> attachments =
                 {
@@ -1683,7 +1670,7 @@ namespace Projector
         // Main render record & submit
         {
             vkResetCommandBuffer(drawCommandBuffers_[currentFrame_], 0);
-            RecordDraw(drawCommandBuffers_[currentFrame_], imageIndex);
+            RecordDraw(drawCommandBuffers_[currentFrame_]);
 
             VkSubmitInfo submitInfo
             {
@@ -1764,7 +1751,7 @@ namespace Projector
         currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
-    void Projector::RecordDraw(VkCommandBuffer commandBuffer, uint32_t imageIndex) const
+    void Projector::RecordDraw(VkCommandBuffer commandBuffer) const
     {
         VkCommandBufferBeginInfo beginInfo
         {
@@ -1788,7 +1775,7 @@ namespace Projector
         {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = renderPass_,
-            .framebuffer = swapChainFramebuffers_[imageIndex],
+            .framebuffer = mainFramebuffers_[currentFrame_],
             .renderArea = VkRect2D
             {
                 .offset = { 0, 0 },
@@ -1975,15 +1962,17 @@ namespace Projector
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         vkDestroyRenderPass(device_, warpRenderPass_, nullptr);
 
-        for (size_t i = 0; i < swapChainFramebuffers_.size(); i++)
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            vkDestroyFramebuffer(device_, swapChainFramebuffers_[i], nullptr);
+            vkDestroyFramebuffer(device_, mainFramebuffers_[i], nullptr);
+        }
+
+        for (size_t i = 0; i < swapChainImages_.size(); i++)
+        {
             vkDestroyFramebuffer(device_, warpFramebuffers_[i], nullptr);
             vkDestroyImageView(device_, swapChainImageViews_[i], nullptr);
         }
-        for (size_t i = 0; i < swapChainImageViews_.size(); i++)
-        {
-        }
+
         vkDestroySwapchainKHR(device_, swapChain_, nullptr);
     }
 

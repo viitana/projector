@@ -110,7 +110,7 @@ namespace Projector
 
 		void UpdateUniformBuffer(uint32_t currentImage);
 		void DrawFrame();
-		void RecordDraw(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
+		void RecordDraw(VkCommandBuffer commandBuffer) const;
 		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
 
 		void RecreateSwapChain();
@@ -137,7 +137,7 @@ namespace Projector
 		std::vector<VkImageView> swapChainImageViews_;
 		VkFormat swapChainImageFormat_;
 		VkExtent2D swapChainExtent_;
-		std::vector<VkFramebuffer> swapChainFramebuffers_;
+		std::vector<VkFramebuffer> mainFramebuffers_;
 		std::vector<VkFramebuffer> warpFramebuffers_;
 		bool framebufferResized_ = false;
 
