@@ -12,7 +12,6 @@ glm::quat TwistDecompose(glm::quat rotation, glm::vec3 direction)
     glm::vec3 p = glm::proj(ra, direction); 
     glm::quat twist = glm::quat(p.x, p.y, p.z, rotation.w);
     return glm::normalize(twist);
-    //return glm::quat();
 }
 
 namespace Projector

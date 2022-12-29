@@ -35,7 +35,9 @@ namespace Projector
 {
 	const std::vector<const char*> validationLayers =
 	{
+#ifdef _DEBUG
 		"VK_LAYER_KHRONOS_validation",
+#endif
 	};
 	const std::vector<const char*> deviceExtensions =
 	{

@@ -134,7 +134,7 @@ namespace Scene
             struct stat buf;
             if (!stat(filename.c_str(), &buf))
             {
-                throw std::runtime_error("Could not load texture from " + filename + "\n\nThe file may be part of the additional asset pack.\n\nRun \"download_assets.py\" in the repository root to download the latest version.");
+                throw std::runtime_error("Could not load texture from " + filename);
             }
 
             result = ktxTexture_CreateFromNamedFile(filename.c_str(), KTX_TEXTURE_CREATE_LOAD_IMAGE_DATA_BIT, &ktxTexture);
@@ -213,7 +213,7 @@ namespace Scene
         stbi_uc* pixels = stbi_load(path.c_str(), &texWidth, &texHeight, &texChannels, STBI_rgb_alpha);
         if (!pixels)
         {
-            throw std::runtime_error("failed to load texture image!");
+            throw std::runtime_error("failed to load texture image '" + path + "'");
         }
 
         width = texWidth;
