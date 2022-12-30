@@ -1,8 +1,12 @@
 #include "projector.hpp"
 
+#include <chrono>
+#include <thread>
+
 #include <stb_image.h>
 #include <glm/gtc/quaternion.hpp>
 #include <glm/gtx/projection.hpp>
+#include <glm/gtx/euler_angles.hpp>
 
 #include "scene.hpp"
 
@@ -18,6 +22,8 @@ namespace Projector
 {
     Projector::Projector()
     {
+        assert(MAX_FRAMES_IN_FLIGHT > 1);
+
         if (!glfwInit())
         {
             throw std::runtime_error("failed to initialize glfw!");
@@ -71,17 +77,18 @@ namespace Projector
         {
             vkDestroyBuffer(device_, uniformBuffers_[i], nullptr);
             vkFreeMemory(device_, uniformBuffersMemory_[i], nullptr);
-            vkDestroyBuffer(device_, warpUniformBuffers_[i], nullptr);
-            vkFreeMemory(device_, warpUniformBuffersMemory_[i], nullptr);
         }
+        vkDestroyBuffer(device_, warpUniformBuffer_, nullptr);
+        vkFreeMemory(device_, warpUniformBufferMemory_, nullptr);
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            vkDestroySemaphore(device_, imageAvailableSemaphores_[i], nullptr);
-            vkDestroySemaphore(device_, renderFinishedSemaphores_[i], nullptr);
-            vkDestroySemaphore(device_, warpFinishedSemaphores_[i], nullptr);
+            vkDestroySemaphore(device_, renderReadySemaphores_[i], nullptr);
             vkDestroyFence(device_, inFlightFences_[i], nullptr);
         }
+        vkDestroySemaphore(device_, imageAvailableSemaphore_, nullptr);
+        vkDestroySemaphore(device_, warpFinishedSemaphore_, nullptr);
+        vkDestroyFence(device_, warpInFlightFence_, nullptr);
 
         vkDestroyCommandPool(device_, commandPool_, nullptr);
         vkDestroyDevice(device_, nullptr);
@@ -92,26 +99,41 @@ namespace Projector
         glfwDestroyWindow(window_);
         glfwTerminate();
 
-        std::cout << "Cleaned up" << std::endl;
+        std::cout << "Cleaned up" << std::endl; 
     }
 
     void Projector::Run()
     {
-        static auto startTime = std::chrono::high_resolution_clock::now();
-        static bool changed = false;
+        const float RENDER_PERIOD = 1.0f / 60.0f;
+        const float WARP_PREDIOD = 1.0f / 1200.0f;
+
+        static auto lastRefresh = std::chrono::high_resolution_clock::now();
+        static float tillRender = RENDER_PERIOD;
+        static float tillWarp = WARP_PREDIOD;
 
         while (!glfwWindowShouldClose(window_))
         {
-            glfwPollEvents();
-            DrawFrame();
+            const auto currentTime = std::chrono::high_resolution_clock::now();
+            const float deltaTime = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - lastRefresh).count();
+            lastRefresh = currentTime;
 
-            auto currentTime = std::chrono::high_resolution_clock::now();
-            float time = std::chrono::duration<float, std::chrono::seconds::period>(currentTime - startTime).count();
+            tillRender -= deltaTime;
+            tillWarp -= deltaTime;
 
-            if (!false && time > 2.5f)
+            if (tillRender < 0 || tillWarp < 0)
             {
-                changed = true;
-                startTime = std::chrono::high_resolution_clock::now();
+                glfwPollEvents();
+                if (tillRender < 0)
+                {
+                    DrawFrame();
+
+                    tillRender += RENDER_PERIOD;
+                }
+                if (tillWarp < 0)
+                {
+                    WarpPresent();
+                    tillWarp += WARP_PREDIOD;
+                }
             }
         }
         vkDeviceWaitIdle(device_);
@@ -1163,9 +1185,25 @@ namespace Projector
         }
         // Render result image
         {
-            VkFormat colorFormat = swapChainImageFormat_;
-            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT , VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImage_, resultImageMemory_);
-            resultImageView_ = Util::CreateImageView(device_, resultImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            resultImages_.resize(MAX_FRAMES_IN_FLIGHT);
+            resultImageViews_.resize(MAX_FRAMES_IN_FLIGHT);
+            resultImagesMemory_.resize(MAX_FRAMES_IN_FLIGHT);
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+            {
+                VkFormat colorFormat = swapChainImageFormat_;
+                Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImages_[i], resultImagesMemory_[i]);
+                resultImageViews_[i] = Util::CreateImageView(device_, resultImages_[i], colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+                Util::TransitionImageLayout(
+                    device_,
+                    commandPool_,
+                    graphicsQueue_,
+                    resultImages_[i],
+                    swapChainImageFormat_,
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    1
+                );
+            }
         }
     }
 
@@ -1179,7 +1217,7 @@ namespace Projector
                 {
                     colorImageView_,
                     depthImageView_,
-                    resultImageView_,
+                    resultImageViews_[i],
                 };
                 VkFramebufferCreateInfo framebufferInfo
                 {
@@ -1244,17 +1282,10 @@ namespace Projector
         }
 
         {
-            VkDeviceSize bufferSize = sizeof(UniformBufferObject);
+            VkDeviceSize bufferSize = sizeof(WarpUniformBufferObject);
 
-            warpUniformBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
-            warpUniformBuffersMemory_.resize(MAX_FRAMES_IN_FLIGHT);
-            warpUniformBuffersMapped_.resize(MAX_FRAMES_IN_FLIGHT);
-
-            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, warpUniformBuffers_[i], warpUniformBuffersMemory_[i]);
-                vkMapMemory(device_, warpUniformBuffersMemory_[i], 0, bufferSize, 0, &warpUniformBuffersMapped_[i]);
-            }
+            Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, warpUniformBuffer_, warpUniformBufferMemory_);
+            vkMapMemory(device_, warpUniformBufferMemory_, 0, bufferSize, 0, &warpUniformBufferMapped_);
         }
     }
 
@@ -1269,9 +1300,9 @@ namespace Projector
             .magFilter = VK_FILTER_LINEAR,
             .minFilter = VK_FILTER_LINEAR,
             .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
-            .addressModeU = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .addressModeV = VK_SAMPLER_ADDRESS_MODE_REPEAT,
-            .addressModeW = VK_SAMPLER_ADDRESS_MODE_REPEAT,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .mipLodBias = 0.0f, // Optional
             .anisotropyEnable = VK_TRUE,
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
@@ -1438,7 +1469,7 @@ namespace Projector
                 .descriptorSetCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
                 .pSetLayouts = layouts.data(),
             };
-
+            
             warpDescriptorSets_.resize(MAX_FRAMES_IN_FLIGHT);
             const VkResult result = vkAllocateDescriptorSets(device_, &allocInfo, warpDescriptorSets_.data());
             if (result != VK_SUCCESS)
@@ -1450,15 +1481,15 @@ namespace Projector
             {
                 VkDescriptorBufferInfo bufferInfo
                 {
-                    .buffer = warpUniformBuffers_[i],
+                    .buffer = warpUniformBuffer_,
                     .offset = 0,
-                    .range = sizeof(UniformBufferObject),
+                    .range = sizeof(WarpUniformBufferObject),
                 };
 
                 VkDescriptorImageInfo imageInfo
                 {
                     .sampler = warpSampler_,
-                    .imageView = resultImageView_,
+                    .imageView = resultImageViews_[i],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 };
 
@@ -1511,17 +1542,15 @@ namespace Projector
         }
         // Warp
         {
-            warpCommandBuffers_.resize(MAX_FRAMES_IN_FLIGHT);
-
             VkCommandBufferAllocateInfo allocInfo
             {
                 .sType = VK_STRUCTURE_TYPE_COMMAND_BUFFER_ALLOCATE_INFO,
                 .commandPool = commandPool_,
                 .level = VK_COMMAND_BUFFER_LEVEL_PRIMARY,
-                .commandBufferCount = (uint32_t)warpCommandBuffers_.size(),
+                .commandBufferCount = 1,
             };
 
-            if (vkAllocateCommandBuffers(device_, &allocInfo, warpCommandBuffers_.data()) != VK_SUCCESS)
+            if (vkAllocateCommandBuffers(device_, &allocInfo, &warpCommandBuffer_) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to allocate warp command buffers!");
             }
@@ -1530,9 +1559,7 @@ namespace Projector
 
     void Projector::CreateSyncObjects()
     {
-        imageAvailableSemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
-        renderFinishedSemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
-        warpFinishedSemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
+        renderReadySemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
         inFlightFences_.resize(MAX_FRAMES_IN_FLIGHT);
 
         VkSemaphoreCreateInfo semaphoreInfo
@@ -1548,17 +1575,21 @@ namespace Projector
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            if (vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableSemaphores_[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &renderFinishedSemaphores_[i]) != VK_SUCCESS ||
-                vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &warpFinishedSemaphores_[i]) != VK_SUCCESS ||
+            if (vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &renderReadySemaphores_[i]) != VK_SUCCESS ||
                 vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFences_[i]) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create synchronization objects for a frame!");
+                throw std::runtime_error("failed to create synchronization objects for frame");
             }
+        }
+        if (vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableSemaphore_) != VK_SUCCESS ||
+            vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &warpFinishedSemaphore_) != VK_SUCCESS ||
+            vkCreateFence(device_, &fenceInfo, nullptr, &warpInFlightFence_) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create synchronization objects for warps");
         }
     }
 
-    void Projector::UpdateUniformBuffer(uint32_t currentImage)
+    void Projector::UpdateUniformBuffer(bool render)
     {
         static auto startTime = std::chrono::high_resolution_clock::now();
         static auto lastTime = std::chrono::high_resolution_clock::now();
@@ -1570,20 +1601,56 @@ namespace Projector
 
         Input::UserInput input = Input::InputHandler::GetInput(deltaTime);
         
-        glm::quat pitch = TwistDecompose(player_.rotation, glm::vec3(0,1,0));
+        glm::quat pitch = TwistDecompose(playerWarp_.rotation, glm::vec3(0,1,0));
 
         glm::vec3 relativeMovement =
-            glm::mat4(pitch) *
-            glm::vec4(-input.moveDelta.x, 0, input.moveDelta.y, 0);
-        player_.position += relativeMovement;
-        player_.rotation = player_.rotation * glm::quat(glm::vec3(input.mouseDelta.y, 0, 0));
-        player_.rotation = glm::quat(glm::vec3(0, input.mouseDelta.x, 0)) * player_.rotation;
+            glm::eulerAngleY(playerWarp_.rotation2.x) *
+            glm::vec4(input.moveDelta.x, 0, input.moveDelta.y, 0);
+        playerWarp_.position += relativeMovement;
+
+
+        playerWarp_.rotation = playerWarp_.rotation * glm::quat(glm::vec3(input.mouseDelta.y, 0, 0));
+        playerWarp_.rotation = glm::quat(glm::vec3(0, -input.mouseDelta.x, 0)) * playerWarp_.rotation;
+
+        playerWarp_.rotation2.x += input.mouseDelta.x;
+        playerWarp_.rotation2.y += input.mouseDelta.y;
+
+        if (render)
+        {
+            playerRender_ = playerWarp_;
+        }
+
+        glm::quat warpDiff = playerWarp_.rotation * glm::inverse(playerRender_.rotation);
+        //glm::quat warpDiff = glm::inverse(playerWarp_.rotation ) * playerRender_.rotation;
+        //glm::quat warpDiff = playerRender_.rotation * glm::inverse(playerWarp_.rotation);
+        //glm::quat warpDiff = glm::inverse(playerRender_.rotation) * playerWarp_.rotation;
+        glm::mat4 rotation = glm::eulerAngleYX(
+            playerRender_.rotation2.x,
+            playerRender_.rotation2.y
+        );
+        glm::mat4 rotationI = glm::eulerAngleYX(
+            -playerRender_.rotation2.x,
+            -playerRender_.rotation2.y
+        );
+
+        glm::mat4 rotationw = glm::eulerAngleYX(
+            -playerWarp_.rotation2.x ,
+            -playerWarp_.rotation2.y
+        );
+        //rotationw = glm::eulerAngleYX(
+        //    playerRender_.rotation2.x - playerWarp_.rotation2.x,
+        //    playerRender_.rotation2.y - playerWarp_.rotation2.y
+        //) * rotationw;
+
+        //rotationw = glm::mat4(1.0f);
+
+        glm::mat4 warpUpRotation = glm::eulerAngleX(playerWarp_.rotation2.y);
 
         UniformBufferObject mainUbo
         {
             .view = glm::lookAt(
-                glm::vec3(0, 1.2f, 0) + player_.position,
-                glm::vec3(0, 1.2f, 0) + player_.position + glm::vec3(glm::mat4(player_.rotation) * glm::vec4(0, 0, 1, 0)),
+                glm::vec3(0, 1.2f, 0) + playerWarp_.position,
+                glm::vec3(0, 1.2f, 0) + playerWarp_.position + glm::vec3(rotation * glm::vec4(0, 0, 1, 0)),
                 glm::vec3(0.0f, 1.0f, 0.0f)
             ),
             //.view = glm::translate(
@@ -1606,7 +1673,7 @@ namespace Projector
             ),
         };
         mainUbo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
-        memcpy(uniformBuffersMapped_[currentImage], &mainUbo, sizeof(mainUbo));
+        memcpy(uniformBuffersMapped_[renderFrame_], &mainUbo, sizeof(mainUbo));
 
         float sharpness = 20;
         float flip = 0.5f - 0.5f * glm::cos(0.3f * time) * glm::sqrt(
@@ -1614,34 +1681,79 @@ namespace Projector
             (1 + sharpness * sharpness * glm::pow(glm::cos(0.3f * time), 2))
         );
 
-        UniformBufferObject warpUbo
+        float fow = 75.0f;
+        float hfov = fow / 2.0f;
+        float rfov = 90.0f - (fow / 2.0f);
+        float len = (0.5f / glm::sin(glm::radians(hfov)) * glm::sin(glm::radians(rfov)));
+
+        WarpUniformBufferObject warpUbo
         {
-            //.view = glm::lookAt(
-            //    glm::vec3(0,0,1.3f),
-            //    glm::vec3(0,0,1.3f) + glm::vec3(glm::mat4(player_.rotation) * glm::vec4(0, 0, -1, 0)),
-            //    glm::vec3(0.0f, 1.0f, 0.0f)
-            //),
             .view = glm::lookAt(
-                    glm::vec3(0.3f * glm::sin(time), 0.3f * glm::cos(time), 1.2f),
-                    glm::vec3(0.0f, 0.0f, 0.0f),
-                    glm::vec3(0.0f, 1.0f, 0.0f)
-                ) * glm::rotate(glm::mat4(1.0f), /*flip **/ glm::radians(180.0f), glm::vec3(0.0f, 1.0f, 0.0f)),
+                glm::vec3(0.0f, 0.0f, 0.0f),
+                glm::vec3(0.0f, 0.0f, 0.0f) + glm::vec3(rotationw * glm::vec4(0, 0, 1, 0)),
+                glm::vec3(0.0f, 1.0f, 0.0f)
+            ),
             .proj = glm::perspective(
-                glm::radians(55.0f),
+                glm::radians(75.0f),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
                 0.1f,
                 100.0f
             ),
+            .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0,0,len)),
+            .overFlow = 100.0f
         };
-        memcpy(warpUniformBuffersMapped_[currentImage], &warpUbo, sizeof(warpUbo));
+        //warpUbo.proj[1][1] *= -1;
+        memcpy(warpUniformBufferMapped_, &warpUbo, sizeof(warpUbo));
     }
 
     void Projector::DrawFrame()
     {
-        vkWaitForFences(device_, 1, &inFlightFences_[currentFrame_], VK_TRUE, UINT64_MAX);
+        static bool firstFrame = true;
+
+        vkWaitForFences(device_, 1, &inFlightFences_[renderFrame_], VK_TRUE, UINT64_MAX);
+        vkResetFences(device_, 1, &inFlightFences_[renderFrame_]);
+
+        UpdateUniformBuffer(true);
+
+        uint32_t nextFrame = (renderFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
+
+        VkSemaphore waitSemaphores[] = { renderReadySemaphores_[renderFrame_] };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        VkSemaphore signalSemaphores[] = { renderReadySemaphores_[nextFrame] };
+
+        // Main render record & submit
+        {
+            vkResetCommandBuffer(drawCommandBuffers_[renderFrame_], 0);
+            RecordDraw(drawCommandBuffers_[renderFrame_]);
+
+            VkSubmitInfo submitInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
+                .waitSemaphoreCount = firstFrame ? (uint32_t)0 : (uint32_t)1,
+                .pWaitSemaphores = firstFrame ? VK_NULL_HANDLE : waitSemaphores,
+                .pWaitDstStageMask = firstFrame ? VK_NULL_HANDLE : waitStages,
+                .commandBufferCount = 1,
+                .pCommandBuffers = &drawCommandBuffers_[renderFrame_],
+                .signalSemaphoreCount = 1,
+                .pSignalSemaphores = signalSemaphores,
+            };
+
+            if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[renderFrame_]) != VK_SUCCESS)
+            {
+                throw std::runtime_error("failed to submit draw command buffer!");
+            }
+        }
+
+        firstFrame = false;
+        renderFrame_ = nextFrame;
+    }
+
+    void Projector::WarpPresent()
+    {
+        vkWaitForFences(device_, 1, &warpInFlightFence_, VK_TRUE, UINT64_MAX);
 
         uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(device_, swapChain_, UINT64_MAX, imageAvailableSemaphores_[currentFrame_], VK_NULL_HANDLE, &imageIndex);
+        VkResult result = vkAcquireNextImageKHR(device_, swapChain_, UINT64_MAX, imageAvailableSemaphore_, VK_NULL_HANDLE, &imageIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
             std::cout << "Out-of-date swapchain on image acquire" << std::endl;
@@ -1657,62 +1769,39 @@ namespace Projector
             throw std::runtime_error("failed to acquire swap chain image!");
         }
 
-        vkResetFences(device_, 1, &inFlightFences_[currentFrame_]);
+        vkResetFences(device_, 1, &warpInFlightFence_);
 
-        UpdateUniformBuffer(currentFrame_);
+        UpdateUniformBuffer(false);
 
-        VkSemaphore imageAvailableSemaphore[] = { imageAvailableSemaphores_[currentFrame_] };
-        VkPipelineStageFlags imageAvailableStage[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore renderFinishedSemaphore[] = { renderFinishedSemaphores_[currentFrame_] };
-        VkPipelineStageFlags renderFinishedStage[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore warpFinishedSemaphore[] = { warpFinishedSemaphores_[currentFrame_] };
+        uint32_t nextFrame = (warpFrame_ + 1) % swapChainImages_.size();
 
-        // Main render record & submit
-        {
-            vkResetCommandBuffer(drawCommandBuffers_[currentFrame_], 0);
-            RecordDraw(drawCommandBuffers_[currentFrame_]);
-
-            VkSubmitInfo submitInfo
-            {
-                .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
-                .waitSemaphoreCount = 1,
-                .pWaitSemaphores = imageAvailableSemaphore,
-                .pWaitDstStageMask = imageAvailableStage,
-                .commandBufferCount = 1,
-                .pCommandBuffers = &drawCommandBuffers_[currentFrame_],
-                .signalSemaphoreCount = 1,
-                .pSignalSemaphores = renderFinishedSemaphore,
-            };
-
-            if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, VK_NULL_HANDLE) != VK_SUCCESS)
-            {
-                throw std::runtime_error("failed to submit draw command buffer!");
-            }
-        }
-
-        vkQueueWaitIdle(graphicsQueue_);
+        VkSemaphore waitSemaphores[] = { imageAvailableSemaphore_ };
+        VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
+        VkSemaphore signalSemaphores[] = { warpFinishedSemaphore_ };
 
         // Warp record & submit
         {
-            vkResetCommandBuffer(warpCommandBuffers_[currentFrame_], 0);
-            RecordWarp(warpCommandBuffers_[currentFrame_], imageIndex);
+            vkResetCommandBuffer(warpCommandBuffer_, 0);
+            RecordWarp(warpCommandBuffer_, imageIndex);
 
             VkSubmitInfo submitInfo
             {
                 .sType = VK_STRUCTURE_TYPE_SUBMIT_INFO,
                 .waitSemaphoreCount = 1,
-                .pWaitSemaphores = renderFinishedSemaphore,
-                .pWaitDstStageMask = renderFinishedStage,
+                .pWaitSemaphores = waitSemaphores,
+                .pWaitDstStageMask = waitStages,
                 .commandBufferCount = 1,
-                .pCommandBuffers = &warpCommandBuffers_[currentFrame_],
+                .pCommandBuffers = &warpCommandBuffer_,
                 .signalSemaphoreCount = 1,
-                .pSignalSemaphores = warpFinishedSemaphore,
+                .pSignalSemaphores = signalSemaphores,
             };
 
-            if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[currentFrame_]) != VK_SUCCESS)
+            if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, warpInFlightFence_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to submit draw command buffer!");
+                throw std::runtime_error("failed to submit warp command buffer!");
             }
+
+            warpFrame_ = nextFrame;
         }
 
         VkSwapchainKHR swapChains[] = { swapChain_ };
@@ -1720,7 +1809,7 @@ namespace Projector
         {
             .sType = VK_STRUCTURE_TYPE_PRESENT_INFO_KHR,
             .waitSemaphoreCount = 1,
-            .pWaitSemaphores = warpFinishedSemaphore,
+            .pWaitSemaphores = signalSemaphores,
             .swapchainCount = 1,
             .pSwapchains = swapChains,
             .pImageIndices = &imageIndex,
@@ -1747,8 +1836,6 @@ namespace Projector
         {
             throw std::runtime_error("failed to present swap chain image!");
         }
-
-        currentFrame_ = (currentFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
     }
 
     void Projector::RecordDraw(VkCommandBuffer commandBuffer) const
@@ -1775,7 +1862,7 @@ namespace Projector
         {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = renderPass_,
-            .framebuffer = mainFramebuffers_[currentFrame_],
+            .framebuffer = mainFramebuffers_[renderFrame_],
             .renderArea = VkRect2D
             {
                 .offset = { 0, 0 },
@@ -1812,7 +1899,7 @@ namespace Projector
             pipelineLayout_,
             0,
             1,
-            &descriptorSets_[currentFrame_],
+            &descriptorSets_[renderFrame_],
             0,
             nullptr
         );
@@ -1843,7 +1930,7 @@ namespace Projector
 
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to begin recording awrp command buffer!");
+            throw std::runtime_error("failed to begin recording warp command buffer!");
         }
 
         std::array<VkClearValue, 2> clearValues
@@ -1875,7 +1962,7 @@ namespace Projector
             warpPipelineLayout_,
             0,
             1,
-            &warpDescriptorSets_[currentFrame_],
+            &warpDescriptorSets_[(renderFrame_ + MAX_FRAMES_IN_FLIGHT - 1) % MAX_FRAMES_IN_FLIGHT],
             0,
             nullptr
         );
@@ -1948,9 +2035,12 @@ namespace Projector
         vkDestroyImage(device_, warpColorImage_, nullptr);
         vkFreeMemory(device_, warpColorImageMemory_, nullptr);
 
-        vkDestroyImageView(device_, resultImageView_, nullptr);
-        vkDestroyImage(device_, resultImage_, nullptr);
-        vkFreeMemory(device_, resultImageMemory_, nullptr);
+        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            vkDestroyImageView(device_, resultImageViews_[i], nullptr);
+            vkDestroyImage(device_, resultImages_[i], nullptr);
+            vkFreeMemory(device_, resultImagesMemory_[i], nullptr);
+        }
 
         vkDestroySampler(device_, warpSampler_, nullptr);
 

@@ -65,6 +65,21 @@ namespace Projector
 		alignas(16) glm::mat4 proj;
 	};
 
+	struct WarpUniformBufferObject
+	{
+		alignas(16) glm::mat4 view;
+		alignas(16) glm::mat4 proj;
+		alignas(16) glm::mat4 screen;
+		alignas(4) float overFlow;
+	};
+
+	struct Player
+	{
+		glm::quat rotation;
+		glm::vec3 position;
+		glm::vec2 rotation2;
+	};
+
 	class Projector
 	{
 	public:
@@ -108,8 +123,9 @@ namespace Projector
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
 
-		void UpdateUniformBuffer(uint32_t currentImage);
+		void UpdateUniformBuffer(bool render);
 		void DrawFrame();
+		void WarpPresent();
 		void RecordDraw(VkCommandBuffer commandBuffer) const;
 		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
 
@@ -156,9 +172,9 @@ namespace Projector
 		VkDeviceMemory warpColorImageMemory_;
 		VkImageView warpColorImageView_;
 
-		VkImage resultImage_;
-		VkDeviceMemory resultImageMemory_;
-		VkImageView resultImageView_;
+		std::vector<VkImage> resultImages_;
+		std::vector<VkDeviceMemory> resultImagesMemory_;
+		std::vector<VkImageView> resultImageViews_;
 
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
@@ -180,19 +196,22 @@ namespace Projector
 		VkDescriptorSetLayout warpDescriptorSetLayout_;
 		VkSampler warpSampler_;
 		std::vector<VkDescriptorSet> warpDescriptorSets_;
-		std::vector<VkBuffer> warpUniformBuffers_;
-		std::vector<VkDeviceMemory> warpUniformBuffersMemory_;
-		std::vector<void*> warpUniformBuffersMapped_;
+		VkBuffer warpUniformBuffer_;
+		VkDeviceMemory warpUniformBufferMemory_;
+		void* warpUniformBufferMapped_;
 
 		// Command buffers & syncing
 		VkCommandPool commandPool_;
 		std::vector<VkCommandBuffer> drawCommandBuffers_;
-		std::vector<VkCommandBuffer> warpCommandBuffers_;
-		std::vector<VkSemaphore> imageAvailableSemaphores_;
-		std::vector<VkSemaphore> renderFinishedSemaphores_;
-		std::vector<VkSemaphore> warpFinishedSemaphores_;
+		std::vector<VkSemaphore> renderReadySemaphores_;
+		VkCommandBuffer warpCommandBuffer_;
+		VkSemaphore imageAvailableSemaphore_;
+		VkSemaphore warpFinishedSemaphore_;
 		std::vector<VkFence> inFlightFences_;
-		uint32_t currentFrame_ = 0;
+		VkFence warpInFlightFence_;
+
+		uint32_t renderFrame_ = 0;
+		uint32_t warpFrame_ = 0;
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
@@ -206,13 +225,18 @@ namespace Projector
 		// Input
 		const Input::InputHandler* input_;
 
+		
+
 		// Player
-		struct Player {
-			glm::quat rotation;
-			glm::vec3 position;
-		} player_  = {
-			glm::quat(glm::vec3(0.0, 0.0, 0.0)),
-			glm::vec3()
+		Player playerRender_  =
+		{
+			.rotation = glm::quat(glm::vec3(0.0, 0.0, 0.0)),
+			.position = glm::vec3(),
+		};
+		Player playerWarp_ =
+		{
+			.rotation = glm::quat(glm::vec3(0.0, 0.0, 0.0)),
+			.position = glm::vec3(),
 		};
 	};
 }
