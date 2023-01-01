@@ -26,8 +26,9 @@ private:
 		InputHandler() {}
 
 		static GLFWwindow* window_;
-		static glm::vec3 mouseDelta_;
-		static glm::vec3 mousePos_;
+		static glm::vec2 mouseDelta_;
+		static glm::vec2 mousePos_;
+		static bool mouseDisabled_;
 
 		static glm::vec4 windowedSizePos_;
 	};

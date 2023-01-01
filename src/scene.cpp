@@ -1147,7 +1147,7 @@ namespace Scene
         }
         for (auto& child : node->children)
         {
-            DrawNode(child, commandBuffer, renderFlags);
+            DrawNode(child, commandBuffer, renderFlags, pipelineLayout, renderFlags);
         }
     }
 

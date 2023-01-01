@@ -7,6 +7,7 @@
 #include "vulkan/vulkan.h"
 #include <glm/glm.hpp>
 #include <glm/gtc/quaternion.hpp>
+#include <imgui.h>
 
 #define VK_CHECK_RESULT(f)																				\
 {																										\
@@ -36,6 +37,8 @@ namespace Util
 
 	const VkCommandBuffer BeginSingleTimeCommands(const VkDevice& device, const VkCommandPool& commandPool);	
 	void EndSingleTimeCommands(const VkDevice& device, const VkCommandPool& commandPool, const VkQueue& queue, const VkCommandBuffer commandBuffer);
+
+	void ApplyStyle(ImGuiStyle& style);
 
 	/*glm::quat TwistDecompose(glm::quat rotation, glm::vec3 direction)*/;
 }

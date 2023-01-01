@@ -15,6 +15,10 @@
 #include <fstream>
 #include <unordered_map>
 
+#include <imgui.h>
+#include "imgui_impl_glfw.h"
+#include "imgui_impl_vulkan.h"
+
 #include <vulkan/vulkan.h>
 #include <GLFW/glfw3.h>
 
@@ -122,6 +126,7 @@ namespace Projector
 		void CreateFramebuffers();
 		void CreateCommandBuffers();
 		void CreateSyncObjects();
+		void InitImGui();
 
 		void UpdateUniformBuffer(bool render);
 		void DrawFrame();
@@ -210,6 +215,9 @@ namespace Projector
 		std::vector<VkFence> inFlightFences_;
 		VkFence warpInFlightFence_;
 
+		// UI Resources
+		VkDescriptorPool imguiPool_;
+
 		uint32_t renderFrame_ = 0;
 		uint32_t warpFrame_ = 0;
 
@@ -225,7 +233,12 @@ namespace Projector
 		// Input
 		const Input::InputHandler* input_;
 
-		
+		// Settings
+		bool doRender_ = true;
+		int renderFramerate_ = 60;
+		int warpFramerate_ = 120;
+		bool clamp_ = true;
+		float overDraw_ = 10.0f;
 
 		// Player
 		Player playerRender_  =

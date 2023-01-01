@@ -40,6 +40,9 @@ target_link_libraries(projector PRIVATE glfw)
 find_package(glm CONFIG REQUIRED)
 target_link_libraries(projector PRIVATE glm::glm)
 
+find_package(imgui CONFIG REQUIRED)
+target_link_libraries(projector PRIVATE imgui::imgui)
+
 target_include_directories(projector PUBLIC
                            "${PROJECT_BINARY_DIR}"
                            )

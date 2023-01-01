@@ -423,3 +423,8 @@ FodyWeavers.xsd
 *.sln.iml
 
 !res/*.obj
+
+# Local imgui configuration
+imgui.ini
+
+vcpkg_installed

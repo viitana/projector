@@ -8,6 +8,7 @@
 #include <glm/gtx/projection.hpp>
 #include <glm/gtx/euler_angles.hpp>
 
+
 #include "scene.hpp"
 
 glm::quat TwistDecompose(glm::quat rotation, glm::vec3 direction)
@@ -43,6 +44,7 @@ namespace Projector
 
         scene_ = new Scene::Model(
             "res/sponza/Sponza.gltf",
+            //"res/abeautifulgame/ABeautifulGame.gltf",
             physicalDevice_,
             device_,
             commandPool_,
@@ -61,10 +63,16 @@ namespace Projector
         CreateFramebuffers();
         CreateCommandBuffers();
         CreateSyncObjects();
+        InitImGui();
     }
 
     Projector::~Projector()
     {
+        ImGui_ImplVulkan_Shutdown();
+        ImGui_ImplGlfw_Shutdown();
+        ImGui::DestroyContext();
+        vkDestroyDescriptorPool(device_, imguiPool_, nullptr);
+
         CleanupSwapChain();
 
         delete scene_;
@@ -104,12 +112,9 @@ namespace Projector
 
     void Projector::Run()
     {
-        const float RENDER_PERIOD = 1.0f / 60.0f;
-        const float WARP_PREDIOD = 1.0f / 1200.0f;
-
         static auto lastRefresh = std::chrono::high_resolution_clock::now();
-        static float tillRender = RENDER_PERIOD;
-        static float tillWarp = WARP_PREDIOD;
+        static float tillRender = 0;
+        static float tillWarp = 0;
 
         while (!glfwWindowShouldClose(window_))
         {
@@ -123,16 +128,33 @@ namespace Projector
             if (tillRender < 0 || tillWarp < 0)
             {
                 glfwPollEvents();
+
                 if (tillRender < 0)
                 {
-                    DrawFrame();
+                    if (doRender_) DrawFrame();
 
-                    tillRender += RENDER_PERIOD;
+                    tillRender += 1.0f / (float)renderFramerate_;
                 }
                 if (tillWarp < 0)
                 {
+                    ImGui_ImplVulkan_NewFrame();
+                    ImGui_ImplGlfw_NewFrame();
+                    ImGui::NewFrame();
+
+                    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+                    ImGui::Checkbox("Render", &doRender_);
+                    ImGui::SliderInt("Render framerate", &renderFramerate_, 1, 120);
+                    ImGui::SliderInt("Warp framerate", &warpFramerate_, 1, 120);
+                    ImGui::Checkbox("Clamp", &clamp_);
+                    ImGui::SliderFloat("Overdraw", &overDraw_, 0, 10);
+                    ImGui::End();
+
+                    ImGui::Render();
+
+                    if (!clamp_) overDraw_ = 1.0f;
+
                     WarpPresent();
-                    tillWarp += WARP_PREDIOD;
+                    tillWarp += 1.0f / (float)warpFramerate_;
                 }
             }
         }
@@ -1589,6 +1611,58 @@ namespace Projector
         }
     }
 
+    void Projector::InitImGui()
+    {
+        IMGUI_CHECKVERSION();
+
+        VkDescriptorPoolSize pool_sizes[] =
+        {
+            { VK_DESCRIPTOR_TYPE_SAMPLER, 1000 },
+            { VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, 1000 },
+            { VK_DESCRIPTOR_TYPE_SAMPLED_IMAGE, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_IMAGE, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_TEXEL_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_TEXEL_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER, 1000 },
+            { VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER_DYNAMIC, 1000 },
+            { VK_DESCRIPTOR_TYPE_STORAGE_BUFFER_DYNAMIC, 1000 },
+            { VK_DESCRIPTOR_TYPE_INPUT_ATTACHMENT, 1000 }
+        };
+        VkDescriptorPoolCreateInfo pool_info =
+        {
+            .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
+            .flags = VK_DESCRIPTOR_POOL_CREATE_FREE_DESCRIPTOR_SET_BIT,
+            .maxSets = 1000,
+            .poolSizeCount = std::size(pool_sizes),
+            .pPoolSizes = pool_sizes,
+        };
+        VK_CHECK_RESULT(vkCreateDescriptorPool(device_, &pool_info, nullptr, &imguiPool_));
+
+        ImGui::CreateContext();
+        ImGui::StyleColorsDark();
+        ImGui_ImplGlfw_InitForVulkan(window_, true);
+        Util::ApplyStyle(ImGui::GetStyle());
+
+        ImGui_ImplVulkan_InitInfo init_info =
+        {
+            .Instance = vk_,
+            .PhysicalDevice = physicalDevice_,
+            .Device = device_,
+            .Queue = graphicsQueue_,
+            .DescriptorPool = imguiPool_,
+            .MinImageCount = 3,
+            .ImageCount = 3,
+            .MSAASamples = msaaSamples_,
+        };
+        ImGui_ImplVulkan_Init(&init_info, warpRenderPass_);
+
+        VkCommandBuffer commandBuffer = Util::BeginSingleTimeCommands(device_, commandPool_);
+        ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
+        Util::EndSingleTimeCommands(device_, commandPool_, graphicsQueue_, commandBuffer);
+        ImGui_ImplVulkan_DestroyFontUploadObjects();
+    }
+
     void Projector::UpdateUniformBuffer(bool render)
     {
         static auto startTime = std::chrono::high_resolution_clock::now();
@@ -1632,17 +1706,10 @@ namespace Projector
             -playerRender_.rotation2.x,
             -playerRender_.rotation2.y
         );
-
         glm::mat4 rotationw = glm::eulerAngleYX(
             -playerWarp_.rotation2.x ,
             -playerWarp_.rotation2.y
         );
-        //rotationw = glm::eulerAngleYX(
-        //    playerRender_.rotation2.x - playerWarp_.rotation2.x,
-        //    playerRender_.rotation2.y - playerWarp_.rotation2.y
-        //) * rotationw;
-
-        //rotationw = glm::mat4(1.0f);
 
         glm::mat4 warpUpRotation = glm::eulerAngleX(playerWarp_.rotation2.y);
 
@@ -1653,18 +1720,6 @@ namespace Projector
                 glm::vec3(0, 1.2f, 0) + playerWarp_.position + glm::vec3(rotation * glm::vec4(0, 0, 1, 0)),
                 glm::vec3(0.0f, 1.0f, 0.0f)
             ),
-            //.view = glm::translate(
-            //    glm::rotate(
-            //        glm::lookAt(
-            //            glm::vec3(1.0f, 1.0f, 0.0f),
-            //            glm::vec3(0.0f, 0.0f, 0.0f),
-            //            glm::vec3(0.0f, 1.0f, 0.0f)
-            //        ),
-            //        time * glm::radians(45.0f),
-            //        glm::vec3(0.0f, 1.0f, 0.0f)
-            //    ),
-            //    glm::vec3(0.0f, -2.0f, 0.0f)
-            //),
             .proj = glm::perspective(
                 glm::radians(75.0f),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
@@ -1700,9 +1755,8 @@ namespace Projector
                 100.0f
             ),
             .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0,0,len)),
-            .overFlow = 100.0f
+            .overFlow = overDraw_
         };
-        //warpUbo.proj[1][1] *= -1;
         memcpy(warpUniformBufferMapped_, &warpUbo, sizeof(warpUbo));
     }
 
@@ -1987,6 +2041,9 @@ namespace Projector
 
         vkCmdDraw(commandBuffer, 6, 1, 0, 0);
 
+        ImDrawData* draw_data = ImGui::GetDrawData();
+        ImGui_ImplVulkan_RenderDrawData(draw_data, commandBuffer);
+
         vkCmdEndRenderPass(commandBuffer);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -1997,8 +2054,6 @@ namespace Projector
 
     void Projector::RecreateSwapChain()
     {
-        std::cout << "Recreating swapchain" << std::endl;
-
         int width = 0, height = 0;
         glfwGetFramebufferSize(window_, &width, &height);
         while (width == 0 || height == 0)
@@ -2006,6 +2061,8 @@ namespace Projector
             glfwGetFramebufferSize(window_, &width, &height);
             glfwWaitEvents();
         }
+
+        std::cout << "Recreating swapchain" << std::endl;
 
         vkDeviceWaitIdle(device_);
         CleanupSwapChain();

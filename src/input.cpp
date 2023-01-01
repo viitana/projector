@@ -5,14 +5,16 @@
 namespace Input
 {
 	GLFWwindow* InputHandler::window_ = nullptr;
-	glm::vec3 InputHandler::mouseDelta_ = {};
-	glm::vec3 InputHandler::mousePos_ = {};
+	glm::vec2 InputHandler::mouseDelta_ = {};
+	glm::vec2 InputHandler::mousePos_ = {};
 	glm::vec4 InputHandler::windowedSizePos_ = {};
+	bool InputHandler::mouseDisabled_ = false;
 
 	void InputHandler::Init(GLFWwindow* window)
 	{
 		window_ = window;
-		glfwSetInputMode(window, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
+
+		glfwSetInputMode(window_, GLFW_CURSOR, GLFW_CURSOR_DISABLED);
 
 		glfwSetCursorPosCallback(window, OnCursor);
 		glfwSetKeyCallback(window, OnKey);
@@ -32,11 +34,21 @@ namespace Input
 			.mousePos = mousePos_,
 			.mouseDelta = mouseDelta_,
 		};
-		if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) input.moveDelta.y += 3.0f * deltaTime;
-		if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) input.moveDelta.x -= 3.0f  * deltaTime;
-		if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) input.moveDelta.y -= 3.0f * deltaTime;
-		if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) input.moveDelta.x += 3.0f * deltaTime;
 
+		mouseDisabled_ = glfwGetKey(window_, GLFW_KEY_LEFT_ALT);
+		glfwSetInputMode(
+			window_,
+			GLFW_CURSOR,
+			mouseDisabled_ ? GLFW_CURSOR_NORMAL : GLFW_CURSOR_DISABLED
+		);
+
+		if (!mouseDisabled_)
+		{
+			if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) input.moveDelta.y += 3.0f * deltaTime;
+			if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) input.moveDelta.x -= 3.0f * deltaTime;
+			if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) input.moveDelta.y -= 3.0f * deltaTime;
+			if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) input.moveDelta.x += 3.0f * deltaTime;
+		}
 		mouseDelta_ = {};
 
 		return input;
@@ -45,8 +57,11 @@ namespace Input
 	void InputHandler::OnCursor(GLFWwindow* window, double xpos, double ypos)
 	{
 		if (window != window_) return;
-		mouseDelta_.x += 0.001f * (xpos - mousePos_.x);
-		mouseDelta_.y += 0.001f * (ypos - mousePos_.y);
+		if (!mouseDisabled_)
+		{
+			mouseDelta_.x += 0.001f * (xpos - mousePos_.x);
+			mouseDelta_.y += 0.001f * (ypos - mousePos_.y);
+		}
 		mousePos_.x = xpos;
 		mousePos_.y = ypos;
 	}
