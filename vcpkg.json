@@ -1,0 +1,23 @@
+{
+  "name": "projector",
+  "version": "0.1.0",
+  "dependencies": [
+    {
+      "name": "vulkan",
+      "platform": "x64"
+    },
+    {
+      "name": "glfw3",
+      "platform": "x64"
+    },
+    {
+      "name": "glm",
+      "platform": "x64"
+    },
+    {
+      "name": "imgui",
+      "features": ["freetype", "glfw-binding", "vulkan-binding"],
+      "platform": "x64"
+    }
+  ]
+}

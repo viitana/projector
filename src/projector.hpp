@@ -74,14 +74,27 @@ namespace Projector
 		alignas(16) glm::mat4 view;
 		alignas(16) glm::mat4 proj;
 		alignas(16) glm::mat4 screen;
-		alignas(4) float overFlow;
+		alignas(4) float screenScale;
+		alignas(4) float uvScale;
 	};
 
 	struct Player
 	{
-		glm::quat rotation;
 		glm::vec3 position;
-		glm::vec2 rotation2;
+		glm::vec2 rotation;
+	};
+
+	enum WarpMethod
+	{
+		None = 0,
+		ClampEdge = 1,
+		OverDraw = 2,
+	};
+	const std::vector<const char*> WarpMethodNames =
+	{
+		"None",
+		"Clamp to edge",
+		"Overdraw"
 	};
 
 	class Projector
@@ -180,6 +193,7 @@ namespace Projector
 		std::vector<VkImage> resultImages_;
 		std::vector<VkDeviceMemory> resultImagesMemory_;
 		std::vector<VkImageView> resultImageViews_;
+		VkExtent2D renderExtent_;
 
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_;
@@ -228,7 +242,7 @@ namespace Projector
 		uint16_t objectIndex_ = 0;
 
 		// GLFW scene model
-		Scene::Model* scene_;
+		Scene::Model* scene_ = nullptr;
 
 		// Input
 		const Input::InputHandler* input_;
@@ -237,19 +251,16 @@ namespace Projector
 		bool doRender_ = true;
 		int renderFramerate_ = 60;
 		int warpFramerate_ = 120;
+		float fov_ = 70.0f;
+		WarpMethod warpMethod_ = WarpMethod::ClampEdge;
 		bool clamp_ = true;
-		float overDraw_ = 10.0f;
+		float clampOvershoot_ = 10.0f;
+		float overdrawDegreesChange_ = 5.0f;
+		float overdrawDegrees_ = overdrawDegreesChange_;
+		float renderScale_ = 1.0f;
 
 		// Player
-		Player playerRender_  =
-		{
-			.rotation = glm::quat(glm::vec3(0.0, 0.0, 0.0)),
-			.position = glm::vec3(),
-		};
-		Player playerWarp_ =
-		{
-			.rotation = glm::quat(glm::vec3(0.0, 0.0, 0.0)),
-			.position = glm::vec3(),
-		};
+		Player playerRender_ = {};
+		Player playerWarp_ = {};
 	};
 }

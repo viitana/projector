@@ -8,7 +8,6 @@
 #include <glm/gtx/projection.hpp>
 #include <glm/gtx/euler_angles.hpp>
 
-
 #include "scene.hpp"
 
 glm::quat TwistDecompose(glm::quat rotation, glm::vec3 direction)
@@ -145,14 +144,35 @@ namespace Projector
                     ImGui::Checkbox("Render", &doRender_);
                     ImGui::SliderInt("Render framerate", &renderFramerate_, 1, 120);
                     ImGui::SliderInt("Warp framerate", &warpFramerate_, 1, 120);
+                    ImGui::SliderFloat("FOV", &fov_, 0, MAX_VFOV_DEG - overdrawDegreesChange_ - overdrawDegreesChange_);
                     ImGui::Checkbox("Clamp", &clamp_);
-                    ImGui::SliderFloat("Overdraw", &overDraw_, 0, 10);
+                    ImGui::SliderFloat("Clamp overshoot", &clampOvershoot_, 0, 10);
+                    ImGui::SliderFloat("Overdraw degrees", &overdrawDegreesChange_, 0, (MAX_VFOV_DEG - fov_) / 2);
+                    if (ImGui::IsItemDeactivatedAfterEdit())
+                    {
+                        overdrawDegrees_ = overdrawDegreesChange_;
+                        RecreateSwapChain();
+                    }
+                    if (ImGui::BeginCombo("Warp method", WarpMethodNames[warpMethod_]))
+                    {
+                        for (int n = 0; n < WarpMethodNames.size(); n++)
+                        {
+                            bool is_selected = warpMethod_ == n;
+                            if (ImGui::Selectable(WarpMethodNames[n], is_selected))
+                            {
+                                warpMethod_ = (WarpMethod)n;
+                            }
+                            if (is_selected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
+                    }
                     ImGui::End();
 
                     ImGui::Render();
 
-                    if (!clamp_) overDraw_ = 1.0f;
-
+                    //if (!clamp_) overDraw_ = 1.0f;
+                    overdrawDegrees_ = std::clamp(overdrawDegrees_, 0.0f, 180.0f - fov_);
+                        
                     WarpPresent();
                     tillWarp += 1.0f / (float)warpFramerate_;
                 }
@@ -654,6 +674,11 @@ namespace Projector
 
         swapChainImageFormat_ = surfaceFormat.format;
         swapChainExtent_ = extent;
+        renderExtent_ = VkExtent2D
+        {
+            .width = static_cast<uint32_t>(swapChainExtent_.width * renderScale_),
+            .height = static_cast<uint32_t>(swapChainExtent_.height * renderScale_),
+        };
     }
 
     void Projector::CreateImageViews()
@@ -1190,20 +1215,14 @@ namespace Projector
         // Render color image
         {
             VkFormat colorFormat = swapChainImageFormat_;
-            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
+            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
             colorImageView_ = Util::CreateImageView(device_, colorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
         // Render depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
+            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
             depthImageView_ = Util::CreateImageView(device_, depthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-        }
-        // Warp color image
-        {
-            VkFormat colorFormat = swapChainImageFormat_;
-            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
-            warpColorImageView_ = Util::CreateImageView(device_, warpColorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
         // Render result image
         {
@@ -1213,7 +1232,7 @@ namespace Projector
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
                 VkFormat colorFormat = swapChainImageFormat_;
-                Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImages_[i], resultImagesMemory_[i]);
+                Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImages_[i], resultImagesMemory_[i]);
                 resultImageViews_[i] = Util::CreateImageView(device_, resultImages_[i], colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
                 Util::TransitionImageLayout(
                     device_,
@@ -1226,6 +1245,12 @@ namespace Projector
                     1
                 );
             }
+        }
+        // Warp color image
+        {
+            VkFormat colorFormat = swapChainImageFormat_;
+            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
+            warpColorImageView_ = Util::CreateImageView(device_, warpColorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
@@ -1247,8 +1272,8 @@ namespace Projector
                     .renderPass = renderPass_,
                     .attachmentCount = static_cast<uint32_t>(attachments.size()),
                     .pAttachments = attachments.data(),
-                    .width = swapChainExtent_.width,
-                    .height = swapChainExtent_.height,
+                    .width = renderExtent_.width,
+                    .height = renderExtent_.height,
                     .layers = 1,
                 };
 
@@ -1674,44 +1699,49 @@ namespace Projector
         lastTime = std::chrono::high_resolution_clock::now();
 
         Input::UserInput input = Input::InputHandler::GetInput(deltaTime);
-        
-        glm::quat pitch = TwistDecompose(playerWarp_.rotation, glm::vec3(0,1,0));
 
         glm::vec3 relativeMovement =
-            glm::eulerAngleY(playerWarp_.rotation2.x) *
+            glm::eulerAngleY(playerWarp_.rotation.x) *
             glm::vec4(input.moveDelta.x, 0, input.moveDelta.y, 0);
+
         playerWarp_.position += relativeMovement;
-
-
-        playerWarp_.rotation = playerWarp_.rotation * glm::quat(glm::vec3(input.mouseDelta.y, 0, 0));
-        playerWarp_.rotation = glm::quat(glm::vec3(0, -input.mouseDelta.x, 0)) * playerWarp_.rotation;
-
-        playerWarp_.rotation2.x += input.mouseDelta.x;
-        playerWarp_.rotation2.y += input.mouseDelta.y;
+        playerWarp_.rotation.x += input.mouseDelta.x;
+        playerWarp_.rotation.y += input.mouseDelta.y;
 
         if (render)
         {
             playerRender_ = playerWarp_;
         }
 
-        glm::quat warpDiff = playerWarp_.rotation * glm::inverse(playerRender_.rotation);
-        //glm::quat warpDiff = glm::inverse(playerWarp_.rotation ) * playerRender_.rotation;
-        //glm::quat warpDiff = playerRender_.rotation * glm::inverse(playerWarp_.rotation);
-        //glm::quat warpDiff = glm::inverse(playerRender_.rotation) * playerWarp_.rotation;
         glm::mat4 rotation = glm::eulerAngleYX(
-            playerRender_.rotation2.x,
-            playerRender_.rotation2.y
+            playerRender_.rotation.x,
+            playerRender_.rotation.y
         );
         glm::mat4 rotationI = glm::eulerAngleYX(
-            -playerRender_.rotation2.x,
-            -playerRender_.rotation2.y
+            -playerRender_.rotation.x,
+            -playerRender_.rotation.y
         );
         glm::mat4 rotationw = glm::eulerAngleYX(
-            -playerWarp_.rotation2.x ,
-            -playerWarp_.rotation2.y
+            -playerWarp_.rotation.x ,
+            -playerWarp_.rotation.y
         );
 
-        glm::mat4 warpUpRotation = glm::eulerAngleX(playerWarp_.rotation2.y);
+        float renderFov = fov_ + overdrawDegrees_ + overdrawDegrees_;
+        float warpFov = fov_;
+
+        std::cout << (renderFov) << std::endl;
+
+        float fovAngle = renderFov / 2.0f;
+        float opposingAngle = 90.0f - fovAngle;
+        float screenDistance = (0.5f / glm::sin(glm::radians(fovAngle)) * glm::sin(glm::radians(opposingAngle)));
+
+        float screenScale = 1.0f;
+        float uvScale = 1.0f;
+        if (warpMethod_ == WarpMethod::ClampEdge)
+        {
+            screenScale = clampOvershoot_;
+            uvScale = clampOvershoot_;
+        }
 
         UniformBufferObject mainUbo
         {
@@ -1721,25 +1751,14 @@ namespace Projector
                 glm::vec3(0.0f, 1.0f, 0.0f)
             ),
             .proj = glm::perspective(
-                glm::radians(75.0f),
+                glm::radians(renderFov),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
-                0.1f,
+                0.01f,
                 100.0f
             ),
         };
         mainUbo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
         memcpy(uniformBuffersMapped_[renderFrame_], &mainUbo, sizeof(mainUbo));
-
-        float sharpness = 20;
-        float flip = 0.5f - 0.5f * glm::cos(0.3f * time) * glm::sqrt(
-            (1 + sharpness * sharpness) /
-            (1 + sharpness * sharpness * glm::pow(glm::cos(0.3f * time), 2))
-        );
-
-        float fow = 75.0f;
-        float hfov = fow / 2.0f;
-        float rfov = 90.0f - (fow / 2.0f);
-        float len = (0.5f / glm::sin(glm::radians(hfov)) * glm::sin(glm::radians(rfov)));
 
         WarpUniformBufferObject warpUbo
         {
@@ -1749,13 +1768,14 @@ namespace Projector
                 glm::vec3(0.0f, 1.0f, 0.0f)
             ),
             .proj = glm::perspective(
-                glm::radians(75.0f),
+                glm::radians(warpFov),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
-                0.1f,
+                0.001f,
                 100.0f
             ),
-            .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0,0,len)),
-            .overFlow = overDraw_
+            .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, screenDistance)),
+            .screenScale = screenScale,
+            .uvScale = uvScale,
         };
         memcpy(warpUniformBufferMapped_, &warpUbo, sizeof(warpUbo));
     }
@@ -1920,7 +1940,7 @@ namespace Projector
             .renderArea = VkRect2D
             {
                 .offset = { 0, 0 },
-                .extent = swapChainExtent_,
+                .extent = renderExtent_,
             },
             .clearValueCount = static_cast<uint32_t>(clearValues.size()),
             .pClearValues = clearValues.data(),
@@ -1933,8 +1953,8 @@ namespace Projector
         {
             .x = 0.0f,
             .y = 0.0f,
-            .width = static_cast<float>(swapChainExtent_.width),
-            .height = static_cast<float>(swapChainExtent_.height),
+            .width = static_cast<float>(renderExtent_.width),
+            .height = static_cast<float>(renderExtent_.height),
             .minDepth = 0.0f,
             .maxDepth = 1.0f,
         };
@@ -1943,7 +1963,7 @@ namespace Projector
         VkRect2D scissor
         {
             .offset = { 0, 0 },
-            .extent = swapChainExtent_,
+            .extent = renderExtent_,
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
@@ -2063,6 +2083,11 @@ namespace Projector
         }
 
         std::cout << "Recreating swapchain" << std::endl;
+
+        renderScale_ =
+            glm::tan(glm::radians(fov_ / 2.0f + overdrawDegrees_))
+            / glm::tan(glm::radians(fov_ / 2.0f));
+        renderScale_ = std::clamp(renderScale_, 0.1f, 8.0f);
 
         vkDeviceWaitIdle(device_);
         CleanupSwapChain();

@@ -5,7 +5,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBufferObject {
     mat4 view;
     mat4 proj;
     mat4 screen;
-    float overflow;
+    float screenScale;
 } ubo;
 
 layout(location = 0) out vec2 fragTexCoord;
@@ -36,10 +36,10 @@ void main() {
         ubo.view *
         ubo.screen *
         vec4(
-            ubo.overflow * positions[gl_VertexIndex].x * aspect,
-            ubo.overflow * positions[gl_VertexIndex].y,
+            ubo.screenScale * positions[gl_VertexIndex].x * aspect,
+            ubo.screenScale * positions[gl_VertexIndex].y,
             0.0,
             1.0
         );
-    fragTexCoord = (((uvs[gl_VertexIndex] - 0.5f) * ubo.overflow) + 0.5f);
+    fragTexCoord = (((uvs[gl_VertexIndex] - 0.5f) * ubo.screenScale) + 0.5f);
 }
