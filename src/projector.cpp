@@ -140,7 +140,13 @@ namespace Projector
                     ImGui_ImplGlfw_NewFrame();
                     ImGui::NewFrame();
 
-                    ImGui::Begin("Settings", nullptr, ImGuiWindowFlags_AlwaysAutoResize);
+                    ImGui::Begin("Settings", nullptr,
+                        ImGuiWindowFlags_NoResize |
+                        ImGuiWindowFlags_NoMove |
+                        ImGuiWindowFlags_AlwaysAutoResize
+                    );
+                    ImGui::SetWindowPos(ImVec2(swapChainExtent_.width - ImGui::GetWindowSize().x, 0));
+
                     ImGui::Checkbox("Render", &doRender_);
                     ImGui::SliderInt("Render framerate", &renderFramerate_, 1, 120);
                     ImGui::SliderInt("Warp framerate", &warpFramerate_, 1, 120);
@@ -1665,6 +1671,7 @@ namespace Projector
         VK_CHECK_RESULT(vkCreateDescriptorPool(device_, &pool_info, nullptr, &imguiPool_));
 
         ImGui::CreateContext();
+
         ImGui::StyleColorsDark();
         ImGui_ImplGlfw_InitForVulkan(window_, true);
         Util::ApplyStyle(ImGui::GetStyle());
@@ -1728,8 +1735,6 @@ namespace Projector
 
         float renderFov = fov_ + overdrawDegrees_ + overdrawDegrees_;
         float warpFov = fov_;
-
-        std::cout << (renderFov) << std::endl;
 
         float fovAngle = renderFov / 2.0f;
         float opposingAngle = 90.0f - fovAngle;
@@ -2084,6 +2089,7 @@ namespace Projector
 
         std::cout << "Recreating swapchain" << std::endl;
 
+        ImGui::GetIO().FontGlobalScale = height / 720.0f;
         renderScale_ =
             glm::tan(glm::radians(fov_ / 2.0f + overdrawDegrees_))
             / glm::tan(glm::radians(fov_ / 2.0f));
