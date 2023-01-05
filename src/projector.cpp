@@ -128,13 +128,16 @@ namespace Projector
             {
                 glfwPollEvents();
 
-                if (tillRender < 0)
+                bool rendering = tillRender < 0;
+                bool warping = tillWarp < 0;
+
+                if (rendering)
                 {
                     if (doRender_) DrawFrame();
 
                     tillRender += 1.0f / (float)renderFramerate_;
                 }
-                if (tillWarp < 0)
+                if (doAsyncWarp_ && warping || (!doAsyncWarp_ && rendering))
                 {
                     ImGui_ImplVulkan_NewFrame();
                     ImGui_ImplGlfw_NewFrame();
@@ -147,36 +150,44 @@ namespace Projector
                     );
                     ImGui::SetWindowPos(ImVec2(swapChainExtent_.width - ImGui::GetWindowSize().x, 0));
 
+                    ImGui::Text("Rendering");
+                    ImGui::Indent(4.0f);
                     ImGui::Checkbox("Render", &doRender_);
-                    ImGui::SliderInt("Render framerate", &renderFramerate_, 1, 120);
-                    ImGui::SliderInt("Warp framerate", &warpFramerate_, 1, 120);
-                    ImGui::SliderFloat("FOV", &fov_, 0, MAX_VFOV_DEG - overdrawDegreesChange_ - overdrawDegreesChange_);
-                    ImGui::Checkbox("Clamp", &clamp_);
-                    ImGui::SliderFloat("Clamp overshoot", &clampOvershoot_, 0, 10);
-                    ImGui::SliderFloat("Overdraw degrees", &overdrawDegreesChange_, 0, (MAX_VFOV_DEG - fov_) / 2);
+                    ImGui::SliderInt("Framerate", &renderFramerate_, 1, 120);
+                    ImGui::SliderFloat("Field of view", &fov_, 0, MAX_VFOV_DEG - overdrawDegreesChange_);
+                    ImGui::Indent(-4.0f);
+
+                    ImGui::Text("Asynchronous timewarp");
+                    ImGui::Indent(4.0f);
+                    ImGui::Checkbox("Enabled", &doAsyncWarp_);
+                    ImGui::SliderInt("Framerate", &warpFramerate_, 1, 120);
+                    ImGui::SliderFloat("Overdraw", &overdrawDegreesChange_, 0, MAX_VFOV_DEG - fov_, "%.1f degrees");
                     if (ImGui::IsItemDeactivatedAfterEdit())
                     {
                         overdrawDegrees_ = overdrawDegreesChange_;
                         RecreateSwapChain();
                     }
-                    if (ImGui::BeginCombo("Warp method", WarpMethodNames[warpMethod_]))
-                    {
-                        for (int n = 0; n < WarpMethodNames.size(); n++)
-                        {
-                            bool is_selected = warpMethod_ == n;
-                            if (ImGui::Selectable(WarpMethodNames[n], is_selected))
-                            {
-                                warpMethod_ = (WarpMethod)n;
-                            }
-                            if (is_selected) ImGui::SetItemDefaultFocus();
-                        }
-                        ImGui::EndCombo();
-                    }
+                    ImGui::SliderFloat("Clamp image to edge", &clampOvershootPercent_, 0, 100, "%.0f%%");
+                    ImGui::Indent(-4.0f);
+
+                    
+                    //if (ImGui::BeginCombo("Warp method", WarpMethodNames[warpMethod_]))
+                    //{
+                    //    for (int n = 0; n < WarpMethodNames.size(); n++)
+                    //    {
+                    //        bool is_selected = warpMethod_ == n;
+                    //        if (ImGui::Selectable(WarpMethodNames[n], is_selected))
+                    //        {
+                    //            warpMethod_ = (WarpMethod)n;
+                    //        }
+                    //        if (is_selected) ImGui::SetItemDefaultFocus();
+                    //    }
+                    //    ImGui::EndCombo();
+                    //}
                     ImGui::End();
 
                     ImGui::Render();
 
-                    //if (!clamp_) overDraw_ = 1.0f;
                     overdrawDegrees_ = std::clamp(overdrawDegrees_, 0.0f, 180.0f - fov_);
                         
                     WarpPresent();
@@ -234,7 +245,7 @@ namespace Projector
     {
         for (const auto& availablePresentMode : availablePresentModes)
         {
-            if (availablePresentMode == VK_PRESENT_MODE_IMMEDIATE_KHR)
+            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
             {
                 return availablePresentMode;
             }
@@ -1733,20 +1744,19 @@ namespace Projector
             -playerWarp_.rotation.y
         );
 
-        float renderFov = fov_ + overdrawDegrees_ + overdrawDegrees_;
+        // FOVs for each render pass
+        float renderFov = fov_ + overdrawDegrees_;
         float warpFov = fov_;
 
+        // Screen distance
         float fovAngle = renderFov / 2.0f;
         float opposingAngle = 90.0f - fovAngle;
-        float screenDistance = (0.5f / glm::sin(glm::radians(fovAngle)) * glm::sin(glm::radians(opposingAngle)));
+        float screenDistance = 0.5f / glm::tan(glm::radians(fovAngle));
 
-        float screenScale = 1.0f;
-        float uvScale = 1.0f;
-        if (warpMethod_ == WarpMethod::ClampEdge)
-        {
-            screenScale = clampOvershoot_;
-            uvScale = clampOvershoot_;
-        }
+        // Additional screen scale for clamping
+        float screenAgle = fovAngle + ((clampOvershootPercent_ / 100.0f) * (89.9f - fovAngle));
+        float screenDistFromMid = glm::tan(glm::radians(screenAgle)) * screenDistance;
+        float screenScale = screenDistFromMid / 0.5f;
 
         UniformBufferObject mainUbo
         {
@@ -1780,7 +1790,6 @@ namespace Projector
             ),
             .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, screenDistance)),
             .screenScale = screenScale,
-            .uvScale = uvScale,
         };
         memcpy(warpUniformBufferMapped_, &warpUbo, sizeof(warpUbo));
     }

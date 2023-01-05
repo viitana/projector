@@ -75,7 +75,6 @@ namespace Projector
 		alignas(16) glm::mat4 proj;
 		alignas(16) glm::mat4 screen;
 		alignas(4) float screenScale;
-		alignas(4) float uvScale;
 	};
 
 	struct Player
@@ -249,14 +248,14 @@ namespace Projector
 
 		// Settings
 		bool doRender_ = true;
+		bool doAsyncWarp_ = true;
 		int renderFramerate_ = 60;
 		int warpFramerate_ = 120;
 		float fov_ = 70.0f;
 		WarpMethod warpMethod_ = WarpMethod::ClampEdge;
-		bool clamp_ = true;
-		float clampOvershoot_ = 10.0f;
 		float overdrawDegreesChange_ = 5.0f;
 		float overdrawDegrees_ = overdrawDegreesChange_;
+		float clampOvershootPercent_ = 50.0f;
 		float renderScale_ = 1.0f;
 
 		// Player
