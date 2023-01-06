@@ -109,7 +109,7 @@ namespace Scene
             );
 
             Util::TransitionImageLayout(device, commandPool, copyQueue, image, VK_FORMAT_R8G8B8A8_UNORM, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, mipLevels);
-            Util::CopyBufferToImage(device, commandPool, copyQueue, stagingBuffer, image, width,height);
+            Util::CopyBufferToImage(device, commandPool, copyQueue, stagingBuffer, image, width, height);
 
             vkDestroyBuffer(device, stagingBuffer, nullptr);
             vkFreeMemory(device, stagingBufferMemory, nullptr);

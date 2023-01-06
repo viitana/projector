@@ -45,7 +45,8 @@ namespace Projector
 	};
 	const std::vector<const char*> deviceExtensions =
 	{
-		VK_KHR_SWAPCHAIN_EXTENSION_NAME,
+		VK_KHR_SWAPCHAIN_EXTENSION_NAME, // VK_KHR_swapchain
+		VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, // VK_KHR_fragment_shading_rate
 	};
 
 	struct QueueFamilyIndices
@@ -75,6 +76,7 @@ namespace Projector
 		alignas(16) glm::mat4 proj;
 		alignas(16) glm::mat4 screen;
 		alignas(4) float screenScale;
+		alignas(4) float uvScale;
 	};
 
 	struct Player
@@ -83,17 +85,18 @@ namespace Projector
 		glm::vec2 rotation;
 	};
 
-	enum WarpMethod
+	enum VariableRateShadingMode
 	{
 		None = 0,
-		ClampEdge = 1,
-		OverDraw = 2,
+		TwoByTwo = 1,
+		FourByFour = 2,
 	};
-	const std::vector<const char*> WarpMethodNames =
+
+	const std::vector<const char*> VariableRateShadingNames =
 	{
-		"None",
-		"Clamp to edge",
-		"Overdraw"
+		"1x1 (None)",
+		"2x2",
+		"4x4"
 	};
 
 	class Projector
@@ -185,6 +188,11 @@ namespace Projector
 		VkDeviceMemory colorImageMemory_ = VK_NULL_HANDLE;
 		VkImageView colorImageView_ = VK_NULL_HANDLE;
 
+		// Shading rate map
+		VkImage shadingRateImage_ = VK_NULL_HANDLE;
+		VkDeviceMemory shadingRateImageMemory_ = VK_NULL_HANDLE;
+		VkImageView shadingRateImageView_ = VK_NULL_HANDLE;
+
 		// Warp MSAA / color buffer image
 		VkImage warpColorImage_ = VK_NULL_HANDLE;
 		VkDeviceMemory warpColorImageMemory_ = VK_NULL_HANDLE;
@@ -238,6 +246,10 @@ namespace Projector
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
 
+		// Shading rate properties
+		VkPhysicalDeviceFragmentShadingRatePropertiesKHR shadingRateProperties_;
+		std::vector<VkPhysicalDeviceFragmentShadingRateKHR> shadingRates_;
+
 		// Misc
 		uint16_t objectIndex_ = 0;
 
@@ -252,11 +264,18 @@ namespace Projector
 		bool doAsyncWarp_ = true;
 		int renderFramerate_ = 60;
 		int warpFramerate_ = 120;
-		float fov_ = 75.0f;
-		WarpMethod warpMethod_ = WarpMethod::ClampEdge;
-		float overdrawDegreesChange_ = 5.0f;
+		float fov_ = 72.0f;
+		float overdrawDegreesChange_ = 8.0f;
 		float overdrawDegrees_ = overdrawDegreesChange_;
-		float clampOvershootPercent_ = 50.0f;
+		float clampOvershootPercent_ = 100.0f;
+		VariableRateShadingMode variableRateShadingMode_ = VariableRateShadingMode::FourByFour;
+
+		// General projectioon variables
+		float renderFov_;
+		float renderScreenScale_;
+		float renderOvershotScreenScale_;
+		float viewScreenScale_;
+		float overshootAdditionalScreenScale_;
 		float renderScale_ = 1.0f;
 
 		// Player

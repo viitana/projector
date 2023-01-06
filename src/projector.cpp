@@ -129,6 +129,8 @@ namespace Projector
                     ImGui_ImplGlfw_NewFrame();
                     ImGui::NewFrame();
 
+                    bool doRecreateSwapchain = false;
+
                     ImGui::Begin("Settings", nullptr,
                         ImGuiWindowFlags_NoResize |
                         ImGuiWindowFlags_NoMove |
@@ -156,18 +158,54 @@ namespace Projector
                     ImGui::SliderFloat("Overdraw", &overdrawDegreesChange_, 0, MAX_VFOV_DEG - fov_, "%.1f degrees");
                     if (ImGui::IsItemDeactivatedAfterEdit())
                     {
+                        doRecreateSwapchain = true;
                         overdrawDegrees_ = overdrawDegreesChange_;
-                        RecreateSwapChain();
+                    }
+                    if (ImGui::BeginCombo("Variable rate shade overdraw", VariableRateShadingNames[variableRateShadingMode_]))
+                    {
+                        for (int n = 0; n < VariableRateShadingNames.size(); n++)
+                        {
+                            bool is_selected = variableRateShadingMode_ == n;
+                            if (ImGui::Selectable(VariableRateShadingNames[n], is_selected))
+                            {
+                                variableRateShadingMode_ = (VariableRateShadingMode)n;
+                                doRecreateSwapchain = true;
+                            }
+                            if (is_selected) ImGui::SetItemDefaultFocus();
+                        }
+                        ImGui::EndCombo();
                     }
                     ImGui::SliderFloat("Clamp image to edge", &clampOvershootPercent_, 0, 100, "%.0f%%");
                     ImGui::Indent(-12.0f);
 
                     ImGui::End();
 
+                    // Compute setting-dependent variables
+                    {
+                        renderFov_ = fov_ + overdrawDegrees_;
+
+                        float viewFovAngle = fov_ / 2.0f;
+                        float renderFovAngle = renderFov_ / 2.0f;
+
+                        float renderEdgeFromMid = glm::tan(glm::radians(renderFovAngle));
+                        renderScreenScale_ = renderEdgeFromMid * 2.0f;
+
+                        float renderOvershotFovAngle = renderFovAngle + ((clampOvershootPercent_ / 100.0f) * (89.9f - renderFovAngle));
+                        float renderOvershotEdgeFromMid = glm::tan(glm::radians(renderOvershotFovAngle));
+                        renderOvershotScreenScale_ = renderOvershotEdgeFromMid * 2.0f;
+
+                        float viewEdgeFromMid = glm::tan(glm::radians(viewFovAngle));
+                        viewScreenScale_ = viewEdgeFromMid * 2.0f;
+
+                        renderScale_ = std::clamp(renderScreenScale_ / viewScreenScale_, 0.1f, 8.0f);
+                    }
+
+                    if (doRecreateSwapchain) RecreateSwapChain();
+
                     ImGui::Render();
 
                     overdrawDegrees_ = std::clamp(overdrawDegrees_, 0.0f, 180.0f - fov_);
-                        
+
                     WarpPresent();
                     tillWarp += 1.0f / (float)warpFramerate_;
                 }
@@ -488,12 +526,9 @@ namespace Projector
 
     void Projector::CreateSurface()
     {
-        //GLFWmonitor* monitor = glfwGetPrimaryMonitor();
-        //const GLFWvidmode* mode = glfwGetVideoMode(monitor);
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
         window_ = glfwCreateWindow(1920, 1080, "projector", nullptr, nullptr);
-        // window_ = glfwCreateWindow(1920, 1080, "projector", nullptr, nullptr);
         if (window_ == nullptr)
         {
             throw std::runtime_error("failed to create window!");
@@ -543,12 +578,37 @@ namespace Projector
         {
             if (IsDeviceSuitable(device))
             {
-                VkPhysicalDeviceProperties deviceProperties;
-                vkGetPhysicalDeviceProperties(device, &deviceProperties);
+                VkPhysicalDeviceFragmentShadingRatePropertiesKHR shadingRateProperties
+                {
+                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR,
+                };
+                VkPhysicalDeviceProperties2 deviceProperties
+                {
+                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
+                    .pNext = &shadingRateProperties,
+                };
+                vkGetPhysicalDeviceProperties2(device, &deviceProperties);
 
                 physicalDevice_ = device;
                 msaaSamples_ = GetMaxUsableSampleCount(device);
-                deviceName = deviceProperties.deviceName;
+                msaaSamples_ = VK_SAMPLE_COUNT_2_BIT;
+                deviceName = deviceProperties.properties.deviceName;
+                shadingRateProperties_ = shadingRateProperties;
+
+                auto vkGetPhysicalDeviceFragmentShadingRatesKHR_ = (PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR)vkGetInstanceProcAddr(vk_, "vkGetPhysicalDeviceFragmentShadingRatesKHR");
+
+                uint32_t shadingRatesCount = 0;
+                vkGetPhysicalDeviceFragmentShadingRatesKHR_(device, &shadingRatesCount, VK_NULL_HANDLE);
+                if (shadingRatesCount > 0)
+                {
+                    shadingRates_.resize(shadingRatesCount);
+                    for (VkPhysicalDeviceFragmentShadingRateKHR& fragment_shading_rate : shadingRates_)
+                    {
+                        fragment_shading_rate.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR;
+                    }
+                    vkGetPhysicalDeviceFragmentShadingRatesKHR_(device, &shadingRatesCount, shadingRates_.data());
+                }
+
                 break;
             }
         }
@@ -587,20 +647,32 @@ namespace Projector
         };
         queueCreateInfos.push_back(presentQueueCreateInfo);
 
-        VkPhysicalDeviceFeatures deviceFeatures
+        VkPhysicalDeviceFragmentShadingRateFeaturesKHR shadingRateFeatures
         {
-            .samplerAnisotropy = VK_TRUE,
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_FEATURES_KHR,
+            .pipelineFragmentShadingRate = VK_FALSE,
+            .primitiveFragmentShadingRate = VK_FALSE,
+            .attachmentFragmentShadingRate = VK_TRUE,
+        };
+        VkPhysicalDeviceFeatures2 deviceFeatures2
+        {
+            .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FEATURES_2,
+            .pNext = &shadingRateFeatures,
+            .features = VkPhysicalDeviceFeatures
+            {
+                .samplerAnisotropy = VK_TRUE,
+            }
         };
         VkDeviceCreateInfo createInfo
         {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
+            .pNext = &deviceFeatures2,
             .queueCreateInfoCount = static_cast<uint32_t>(queueCreateInfos.size()),
             .pQueueCreateInfos = queueCreateInfos.data(),
             .enabledLayerCount = static_cast<uint32_t>(validationLayers.size()),
             .ppEnabledLayerNames = validationLayers.data(),
             .enabledExtensionCount = static_cast<uint32_t>(deviceExtensions.size()),
             .ppEnabledExtensionNames = deviceExtensions.data(),
-            .pEnabledFeatures = &deviceFeatures,
         };
 
         if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_) != VK_SUCCESS)
@@ -698,8 +770,9 @@ namespace Projector
     {
         // Main pass
         {
-            VkAttachmentDescription colorAttachment
+            VkAttachmentDescription2 colorAttachment
             {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
                 .format = swapChainImageFormat_,
                 .samples = msaaSamples_,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -707,14 +780,16 @@ namespace Projector
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
-            VkAttachmentReference colorAttachmentRef
+            VkAttachmentReference2 colorAttachmentRef
             {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
                 .attachment = 0,
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
 
-            VkAttachmentDescription depthAttachment
+            VkAttachmentDescription2 depthAttachment
             {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
                 .format = FindDepthFormat(),
                 .samples = msaaSamples_,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
@@ -724,14 +799,16 @@ namespace Projector
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             };
-            VkAttachmentReference depthAttachmentRef
+            VkAttachmentReference2 depthAttachmentRef
             {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
                 .attachment = 1,
                 .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             };
 
-            VkAttachmentDescription colorAttachmentResolve
+            VkAttachmentDescription2 colorAttachmentResolve
             {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
                 .format = swapChainImageFormat_,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -741,14 +818,43 @@ namespace Projector
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
-            VkAttachmentReference colorAttachmentResolveRef
+            VkAttachmentReference2 colorAttachmentResolveRef
             {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
                 .attachment = 2,
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
 
-            VkSubpassDescription subpass
+            VkAttachmentDescription2 shadingRateAttachmentResolve
             {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
+                .format = VK_FORMAT_R8_UINT,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
+                .finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
+            };
+            VkAttachmentReference2 shadingRateAttachmentResolveRef
+            {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+                .attachment = 3,
+                .layout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
+            };
+
+            VkFragmentShadingRateAttachmentInfoKHR shadingRateAttachmentInfo =
+            {
+                .sType = VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR,
+                .pFragmentShadingRateAttachment = &shadingRateAttachmentResolveRef,
+                .shadingRateAttachmentTexelSize = shadingRateProperties_.maxFragmentShadingRateAttachmentTexelSize,
+            };
+
+            VkSubpassDescription2 subpass
+            {
+                .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
+                .pNext = &shadingRateAttachmentInfo,
                 .pipelineBindPoint = VK_PIPELINE_BIND_POINT_GRAPHICS,
                 .colorAttachmentCount = 1,
                 .pColorAttachments = &colorAttachmentRef,
@@ -756,8 +862,9 @@ namespace Projector
                 .pDepthStencilAttachment = &depthAttachmentRef,
             };
 
-            VkSubpassDependency dependency
+            VkSubpassDependency2 dependency
             {
+                .sType = VK_STRUCTURE_TYPE_SUBPASS_DEPENDENCY_2,
                 .srcSubpass = VK_SUBPASS_EXTERNAL,
                 .dstSubpass = 0,
                 .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
@@ -766,10 +873,10 @@ namespace Projector
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             };
 
-            std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
-            VkRenderPassCreateInfo renderPassInfo
+            std::array<VkAttachmentDescription2, 4> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve, shadingRateAttachmentResolve };
+            VkRenderPassCreateInfo2 renderPassInfo
             {
-                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
+                .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2,
                 .attachmentCount = static_cast<uint32_t>(attachments.size()),
                 .pAttachments = attachments.data(),
                 .subpassCount = 1,
@@ -778,7 +885,7 @@ namespace Projector
                 .pDependencies = &dependency,
             };
 
-            if (vkCreateRenderPass(device_, &renderPassInfo, nullptr, &renderPass_) != VK_SUCCESS)
+            if (vkCreateRenderPass2(device_, &renderPassInfo, nullptr, &renderPass_) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create render pass!");
             }
@@ -889,7 +996,7 @@ namespace Projector
                 .primitiveRestartEnable = VK_FALSE,
             };
 
-            std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR };
+            std::vector<VkDynamicState> dynamicStates = { VK_DYNAMIC_STATE_VIEWPORT, VK_DYNAMIC_STATE_SCISSOR, VK_DYNAMIC_STATE_FRAGMENT_SHADING_RATE_KHR };
             VkPipelineDynamicStateCreateInfo dynamicState
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_DYNAMIC_STATE_CREATE_INFO,
@@ -1228,6 +1335,82 @@ namespace Projector
             Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
             depthImageView_ = Util::CreateImageView(device_, depthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
+        // Shading rate map image
+        {
+            VkFormat rateFormat = VK_FORMAT_R8_UINT;
+            uint32_t width = static_cast<uint32_t>(ceil(renderExtent_.width / (float)shadingRateProperties_.maxFragmentShadingRateAttachmentTexelSize.width));
+            uint32_t height = static_cast<uint32_t>(ceil(renderExtent_.height / (float)shadingRateProperties_.maxFragmentShadingRateAttachmentTexelSize.height));
+            Util::CreateImage(physicalDevice_, device_, width, height, 1, VK_SAMPLE_COUNT_1_BIT, rateFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadingRateImage_, shadingRateImageMemory_);
+            shadingRateImageView_ = Util::CreateImageView(device_, shadingRateImage_, rateFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        
+            VkDeviceSize imageSize = width * height * sizeof(uint8_t);
+
+            uint8_t noneVal = 0;
+            uint8_t variableShaded = 0;
+            switch (variableRateShadingMode_)
+            {
+            case VariableRateShadingMode::None:
+                variableShaded = 0;
+                break;
+            case VariableRateShadingMode::TwoByTwo:
+                variableShaded = (2 >> 1) | (2 << 1);
+                break;
+            case VariableRateShadingMode::FourByFour:
+                variableShaded = (4 >> 1) | (4 << 1);
+                break;
+            }
+
+            uint8_t* mapData = new uint8_t[imageSize];
+            memset(mapData, noneVal, imageSize);
+
+            float visibleRatio = viewScreenScale_ / renderScreenScale_;
+            float outsideWidth = (width - width * visibleRatio) * 0.5f;
+            float outsideHeight = (height - height * visibleRatio) * 0.5f;
+
+            uint8_t* cursor = mapData;
+            for (uint32_t y = 0; y < height; y++)
+            {
+                for (uint32_t x = 0; x < width; x++)
+                {
+                    const float deltaX = ((float)width / 2.0f - (float)x) / width * 100.0f;
+                    const float deltaY = ((float)height / 2.0f - (float)y) / height * 100.0f;
+                    const float dist = std::sqrt(deltaX * deltaX + deltaY * deltaY);
+                    if (x < outsideWidth || x > width - outsideWidth || y < outsideHeight || y > height - outsideHeight)
+                    {
+                        *cursor = variableShaded;
+                    }
+                    cursor++;
+                }
+            }
+
+            VkBuffer stagingBuffer;
+            VkDeviceMemory stagingBufferMemory;
+            Util::CreateBuffer(physicalDevice_, device_, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+
+            uint8_t* data;
+            vkMapMemory(device_, stagingBufferMemory, 0, imageSize, 0, (void**)&data);
+            memcpy(data, mapData, (size_t)imageSize);
+            vkUnmapMemory(device_, stagingBufferMemory);
+
+            Util::TransitionImageLayout(device_, commandPool_, graphicsQueue_, shadingRateImage_, VK_FORMAT_R8_UINT, VK_IMAGE_LAYOUT_UNDEFINED, VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL, 1);
+            Util::CopyBufferToImage(device_, commandPool_, graphicsQueue_, stagingBuffer, shadingRateImage_, width, height);
+
+            vkDestroyBuffer(device_, stagingBuffer, nullptr);
+            vkFreeMemory(device_, stagingBufferMemory, nullptr);
+
+            Util::TransitionImageLayout(
+                device_,
+                commandPool_,
+                graphicsQueue_,
+                shadingRateImage_,
+                VK_FORMAT_R8_UINT,
+                VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL,
+                VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
+                1
+            );
+
+
+        }
         // Render result image
         {
             resultImages_.resize(MAX_FRAMES_IN_FLIGHT);
@@ -1260,15 +1443,17 @@ namespace Projector
 
     void Projector::CreateFramebuffers()
     {
+        // Main render pass framebuffers
         {
             mainFramebuffers_.resize(MAX_FRAMES_IN_FLIGHT);
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
-                std::array<VkImageView, 3> attachments =
+                std::array<VkImageView, 4> attachments =
                 {
                     colorImageView_,
                     depthImageView_,
                     resultImageViews_[i],
+                    shadingRateImageView_,
                 };
                 VkFramebufferCreateInfo framebufferInfo
                 {
@@ -1746,20 +1931,6 @@ namespace Projector
             -playerWarp_.rotation.y
         );
 
-        // FOVs for each render pass
-        float renderFov = fov_ + overdrawDegrees_;
-        float warpFov = fov_;
-
-        // Screen distance
-        float fovAngle = renderFov / 2.0f;
-        float opposingAngle = 90.0f - fovAngle;
-        float screenDistance = 0.5f / glm::tan(glm::radians(fovAngle));
-
-        // Additional screen scale for clamping
-        float screenAgle = fovAngle + ((clampOvershootPercent_ / 100.0f) * (89.9f - fovAngle));
-        float screenDistFromMid = glm::tan(glm::radians(screenAgle)) * screenDistance;
-        float screenScale = screenDistFromMid / 0.5f;
-
         UniformBufferObject mainUbo
         {
             .view = glm::lookAt(
@@ -1768,7 +1939,7 @@ namespace Projector
                 glm::vec3(0.0f, 1.0f, 0.0f)
             ),
             .proj = glm::perspective(
-                glm::radians(renderFov),
+                glm::radians(renderFov_),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
                 0.01f,
                 100.0f
@@ -1785,13 +1956,14 @@ namespace Projector
                 glm::vec3(0.0f, 1.0f, 0.0f)
             ),
             .proj = glm::perspective(
-                glm::radians(warpFov),
+                glm::radians(fov_),
                 swapChainExtent_.width / (float)swapChainExtent_.height,
                 0.001f,
                 100.0f
             ),
-            .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, screenDistance)),
-            .screenScale = screenScale,
+            .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 1)),
+            .screenScale = renderOvershotScreenScale_,
+            .uvScale = renderOvershotScreenScale_ / renderScreenScale_,
         };
         memcpy(warpUniformBufferMapped_, &warpUbo, sizeof(warpUbo));
     }
@@ -2003,6 +2175,12 @@ namespace Projector
             nullptr
         );
 
+        VkExtent2D fragmentSize = { 1, 1 };
+        VkFragmentShadingRateCombinerOpKHR combinerOps[2] = { VK_FRAGMENT_SHADING_RATE_COMBINER_OP_KEEP_KHR , VK_FRAGMENT_SHADING_RATE_COMBINER_OP_REPLACE_KHR };
+        auto vkCmdSetFragmentShadingRateKHR = (PFN_vkCmdSetFragmentShadingRateKHR)vkGetInstanceProcAddr(vk_, "vkCmdSetFragmentShadingRateKHR");
+
+        vkCmdSetFragmentShadingRateKHR(commandBuffer, &fragmentSize, combinerOps);
+
         scene_->Draw(
             commandBuffer,
             0u,
@@ -2108,10 +2286,6 @@ namespace Projector
         }
 
         std::cout << "Recreating swapchain" << std::endl;
-        renderScale_ =
-            glm::tan(glm::radians(fov_ / 2.0f + overdrawDegrees_))
-            / glm::tan(glm::radians(fov_ / 2.0f));
-        renderScale_ = std::clamp(renderScale_, 0.1f, 8.0f);
 
         vkDeviceWaitIdle(device_);
         CleanupSwapChain();
@@ -2137,9 +2311,9 @@ namespace Projector
         vkDestroyImage(device_, depthImage_, nullptr);
         vkFreeMemory(device_, depthImageMemory_, nullptr);
 
-        vkDestroyImageView(device_, warpColorImageView_, nullptr);
-        vkDestroyImage(device_, warpColorImage_, nullptr);
-        vkFreeMemory(device_, warpColorImageMemory_, nullptr);
+        vkDestroyImageView(device_, shadingRateImageView_, nullptr);
+        vkDestroyImage(device_, shadingRateImage_, nullptr);
+        vkFreeMemory(device_, shadingRateImageMemory_, nullptr);
 
         for (size_t i = 0; i < resultImageViews_.size(); i++) // MAX_FRAMES_IN_FLIGHT
         {
@@ -2147,6 +2321,10 @@ namespace Projector
             vkDestroyImage(device_, resultImages_[i], nullptr);
             vkFreeMemory(device_, resultImagesMemory_[i], nullptr);
         }
+
+        vkDestroyImageView(device_, warpColorImageView_, nullptr);
+        vkDestroyImage(device_, warpColorImage_, nullptr);
+        vkFreeMemory(device_, warpColorImageMemory_, nullptr);
 
         vkDestroySampler(device_, warpSampler_, nullptr);
 

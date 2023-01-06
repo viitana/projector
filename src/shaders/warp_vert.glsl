@@ -6,6 +6,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBufferObject {
     mat4 proj;
     mat4 screen;
     float screenScale;
+    float uvScale;
 } ubo;
 
 layout(location = 0) out vec2 fragTexCoord;
@@ -41,5 +42,5 @@ void main() {
             0.0,
             1.0
         );
-    fragTexCoord = (((uvs[gl_VertexIndex] - 0.5f) * ubo.screenScale) + 0.5f);
+    fragTexCoord = (((uvs[gl_VertexIndex] - 0.5f) * ubo.uvScale) + 0.5f);
 }

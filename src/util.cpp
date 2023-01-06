@@ -201,6 +201,13 @@ namespace Util
             sourceStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
             destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
         }
+        else if (oldLayout == VK_IMAGE_LAYOUT_TRANSFER_DST_OPTIMAL && newLayout == VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR)
+        {
+            sourceAccessMask = VK_ACCESS_TRANSFER_WRITE_BIT;
+            destinationAccessMask = VK_ACCESS_MEMORY_READ_BIT;
+            sourceStage = VK_PIPELINE_STAGE_TRANSFER_BIT;
+            destinationStage = VK_PIPELINE_STAGE_ALL_COMMANDS_BIT;
+        }
         else if (oldLayout == VK_IMAGE_LAYOUT_UNDEFINED && newLayout == VK_IMAGE_LAYOUT_TRANSFER_SRC_OPTIMAL)
         {
             sourceAccessMask = 0;
