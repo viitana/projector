@@ -10,14 +10,6 @@
 
 #include "scene.hpp"
 
-glm::quat TwistDecompose(glm::quat rotation, glm::vec3 direction)
-{
-    glm::vec3 ra(rotation.x, rotation.y, rotation.z); // rotation axis
-    glm::vec3 p = glm::proj(ra, direction); 
-    glm::quat twist = glm::quat(p.x, p.y, p.z, rotation.w);
-    return glm::normalize(twist);
-}
-
 namespace Projector
 {
     Projector::Projector()
@@ -84,10 +76,10 @@ namespace Projector
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            vkDestroySemaphore(device_, renderReadySemaphores_[i], nullptr);
             vkDestroyFence(device_, inFlightFences_[i], nullptr);
         }
         vkDestroySemaphore(device_, imageAvailableSemaphore_, nullptr);
+        vkDestroySemaphore(device_, renderReadySemaphore_, nullptr);
         vkDestroySemaphore(device_, warpFinishedSemaphore_, nullptr);
         vkDestroyFence(device_, warpInFlightFence_, nullptr);
 
@@ -570,27 +562,35 @@ namespace Projector
 
     void Projector::CreateLogicalDevice()
     {
-        QueueFamilyIndices indices = FindQueueFamilies(physicalDevice_);
+        float defaultPriority = 0.0f;
+        float highPriority = 1.0f;
+
+        QueueFamilyIndices queueFamilies = FindQueueFamilies(physicalDevice_);
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
-        std::set<uint32_t> uniqueQueueFamilies = { indices.graphicsFamily.value(), indices.presentFamily.value() };
-        float queuePriority = 1.0f;
-        for (uint32_t queueFamily : uniqueQueueFamilies)
+
+        std::array<float, 2> graphicsQueuePriorities { defaultPriority, highPriority };
+        VkDeviceQueueCreateInfo graphicsQueueCreateInfo
         {
-            VkDeviceQueueCreateInfo queueCreateInfo
-            {
-                .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-                .queueFamilyIndex = queueFamily,
-                .queueCount = 1,
-                .pQueuePriorities = &queuePriority,
-            };
-            queueCreateInfos.push_back(queueCreateInfo);
-        }
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = queueFamilies.graphicsFamily.value(),
+            .queueCount = 2,
+            .pQueuePriorities = graphicsQueuePriorities.data(),
+        };
+        queueCreateInfos.push_back(graphicsQueueCreateInfo);
+
+        VkDeviceQueueCreateInfo presentQueueCreateInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+            .queueFamilyIndex = queueFamilies.presentFamily.value(),
+            .queueCount = 1,
+            .pQueuePriorities = &defaultPriority,
+        };
+        queueCreateInfos.push_back(presentQueueCreateInfo);
 
         VkPhysicalDeviceFeatures deviceFeatures
         {
             .samplerAnisotropy = VK_TRUE,
         };
-
         VkDeviceCreateInfo createInfo
         {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -608,8 +608,9 @@ namespace Projector
             throw std::runtime_error("failed to create logical device!");
         }
 
-        vkGetDeviceQueue(device_, indices.graphicsFamily.value(), 0, &graphicsQueue_);
-        vkGetDeviceQueue(device_, indices.presentFamily.value(), 0, &presentQueue_);
+        vkGetDeviceQueue(device_, queueFamilies.graphicsFamily.value(), 0, &graphicsQueue_);
+        vkGetDeviceQueue(device_, queueFamilies.graphicsFamily.value(), 1, &warpQueue_);
+        vkGetDeviceQueue(device_, queueFamilies.presentFamily.value(), 0, &presentQueue_);
     }
 
     void Projector::CreateSwapChain()
@@ -1609,10 +1610,21 @@ namespace Projector
 
     void Projector::CreateSyncObjects()
     {
-        renderReadySemaphores_.resize(MAX_FRAMES_IN_FLIGHT);
         inFlightFences_.resize(MAX_FRAMES_IN_FLIGHT);
 
+        VkSemaphoreTypeCreateInfo timelineCreateInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_TYPE_CREATE_INFO,
+            .semaphoreType = VK_SEMAPHORE_TYPE_TIMELINE,
+            .initialValue = 0,
+        };
+
         VkSemaphoreCreateInfo semaphoreInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
+        };
+
+        VkSemaphoreCreateInfo timelineSemaphoreInfo
         {
             .sType = VK_STRUCTURE_TYPE_SEMAPHORE_CREATE_INFO,
         };
@@ -1625,13 +1637,13 @@ namespace Projector
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
         {
-            if (vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &renderReadySemaphores_[i]) != VK_SUCCESS ||
-                vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFences_[i]) != VK_SUCCESS)
+            if (vkCreateFence(device_, &fenceInfo, nullptr, &inFlightFences_[i]) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to create synchronization objects for frame");
             }
         }
         if (vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &imageAvailableSemaphore_) != VK_SUCCESS ||
+            vkCreateSemaphore(device_, &timelineSemaphoreInfo, nullptr, &renderReadySemaphore_) != VK_SUCCESS ||
             vkCreateSemaphore(device_, &semaphoreInfo, nullptr, &warpFinishedSemaphore_) != VK_SUCCESS ||
             vkCreateFence(device_, &fenceInfo, nullptr, &warpInFlightFence_) != VK_SUCCESS)
         {
@@ -1793,16 +1805,25 @@ namespace Projector
 
         UpdateUniformBuffer(true);
 
-        uint32_t nextFrame = (renderFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
+        uint64_t nextFrame = (renderFrame_ + 1) % MAX_FRAMES_IN_FLIGHT;
 
-        VkSemaphore waitSemaphores[] = { renderReadySemaphores_[renderFrame_] };
+        VkSemaphore waitSemaphores[] = { renderReadySemaphore_ };
         VkPipelineStageFlags waitStages[] = { VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT };
-        VkSemaphore signalSemaphores[] = { renderReadySemaphores_[nextFrame] };
+        VkSemaphore signalSemaphores[] = { renderReadySemaphore_ };
 
         // Main render record & submit
         {
             vkResetCommandBuffer(drawCommandBuffers_[renderFrame_], 0);
             RecordDraw(drawCommandBuffers_[renderFrame_]);
+
+            VkTimelineSemaphoreSubmitInfo timelineSubmitInfo
+            {
+                .sType = VK_STRUCTURE_TYPE_TIMELINE_SEMAPHORE_SUBMIT_INFO,
+                .waitSemaphoreValueCount = 1,
+                .pWaitSemaphoreValues = &renderFrame_,
+                .signalSemaphoreValueCount = 1,
+                .pSignalSemaphoreValues = &nextFrame,
+            };
 
             VkSubmitInfo submitInfo
             {
@@ -1874,7 +1895,7 @@ namespace Projector
                 .pSignalSemaphores = signalSemaphores,
             };
 
-            if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, warpInFlightFence_) != VK_SUCCESS)
+            if (vkQueueSubmit(warpQueue_, 1, &submitInfo, warpInFlightFence_) != VK_SUCCESS)
             {
                 throw std::runtime_error("failed to submit warp command buffer!");
             }

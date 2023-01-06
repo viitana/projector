@@ -158,6 +158,7 @@ namespace Projector
 
 		// Queues
 		VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+		VkQueue warpQueue_ = VK_NULL_HANDLE;
 		VkQueue presentQueue_ = VK_NULL_HANDLE;
 
 		// Window & surface
@@ -221,7 +222,7 @@ namespace Projector
 		// Command buffers & syncing
 		VkCommandPool commandPool_ = VK_NULL_HANDLE;
 		std::vector<VkCommandBuffer> drawCommandBuffers_;
-		std::vector<VkSemaphore> renderReadySemaphores_;
+		VkSemaphore renderReadySemaphore_; // VK_SEMAPHORE_TYPE_TIMELINE
 		VkCommandBuffer warpCommandBuffer_ = VK_NULL_HANDLE;
 		VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
 		VkSemaphore warpFinishedSemaphore_ = VK_NULL_HANDLE;
@@ -231,8 +232,8 @@ namespace Projector
 		// UI Resources
 		VkDescriptorPool imguiPool_ = VK_NULL_HANDLE;
 
-		uint32_t renderFrame_ = 0;
-		uint32_t warpFrame_ = 0;
+		uint64_t renderFrame_ = 0;
+		uint64_t warpFrame_ = 0;
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
