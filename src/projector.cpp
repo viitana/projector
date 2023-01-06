@@ -34,9 +34,6 @@ namespace Projector
 
         PickPhysicalDevice();
         CreateLogicalDevice();
-        CreateSwapChain();
-        CreateImageViews();
-
         CreateCommandPool();
 
         Input::InputHandler::Init(window_);
@@ -51,18 +48,15 @@ namespace Projector
             1.0f
         );
 
-        CreateRenderPass();
-        CreateDescriptorSetLayout();
-        CreateGraphicsPipeline();
-        CreateRenderImageResources();
-        CreateWarpSampler();
         CreateUniformBuffers();
-        CreateDescriptorPool();
-        CreateDescriptorSets();
-        CreateFramebuffers();
+
+        RecreateSwapChain();
+        InitImGui();
+
+        CreateGraphicsPipeline();
+
         CreateCommandBuffers();
         CreateSyncObjects();
-        InitImGui();
     }
 
     Projector::~Projector()
@@ -150,17 +144,23 @@ namespace Projector
                     );
                     ImGui::SetWindowPos(ImVec2(swapChainExtent_.width - ImGui::GetWindowSize().x, 0));
 
-                    ImGui::Text("Rendering");
-                    ImGui::Indent(4.0f);
+                    ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Rendering");
+                    ImGui::Spacing();
+                    ImGui::Spacing();
+                    ImGui::Indent(12.0f);
                     ImGui::Checkbox("Render", &doRender_);
-                    ImGui::SliderInt("Framerate", &renderFramerate_, 1, 120);
+                    ImGui::SliderInt("Render framerate", &renderFramerate_, 1, 120);
                     ImGui::SliderFloat("Field of view", &fov_, 0, MAX_VFOV_DEG - overdrawDegreesChange_);
-                    ImGui::Indent(-4.0f);
+                    ImGui::Indent(-12.0f);
 
-                    ImGui::Text("Asynchronous timewarp");
-                    ImGui::Indent(4.0f);
+                    ImGui::Spacing();
+                    ImGui::Spacing();
+                    ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Asynchronous timewarp");
+                    ImGui::Spacing();
+                    ImGui::Spacing();
+                    ImGui::Indent(12.0f);
                     ImGui::Checkbox("Enabled", &doAsyncWarp_);
-                    ImGui::SliderInt("Framerate", &warpFramerate_, 1, 120);
+                    ImGui::SliderInt("Warp framerate", &warpFramerate_, 1, 120);
                     ImGui::SliderFloat("Overdraw", &overdrawDegreesChange_, 0, MAX_VFOV_DEG - fov_, "%.1f degrees");
                     if (ImGui::IsItemDeactivatedAfterEdit())
                     {
@@ -168,22 +168,8 @@ namespace Projector
                         RecreateSwapChain();
                     }
                     ImGui::SliderFloat("Clamp image to edge", &clampOvershootPercent_, 0, 100, "%.0f%%");
-                    ImGui::Indent(-4.0f);
+                    ImGui::Indent(-12.0f);
 
-                    
-                    //if (ImGui::BeginCombo("Warp method", WarpMethodNames[warpMethod_]))
-                    //{
-                    //    for (int n = 0; n < WarpMethodNames.size(); n++)
-                    //    {
-                    //        bool is_selected = warpMethod_ == n;
-                    //        if (ImGui::Selectable(WarpMethodNames[n], is_selected))
-                    //        {
-                    //            warpMethod_ = (WarpMethod)n;
-                    //        }
-                    //        if (is_selected) ImGui::SetItemDefaultFocus();
-                    //    }
-                    //    ImGui::EndCombo();
-                    //}
                     ImGui::End();
 
                     ImGui::Render();
@@ -950,7 +936,7 @@ namespace Projector
                 .dstColorBlendFactor = VK_BLEND_FACTOR_ONE_MINUS_SRC_ALPHA,
                 .colorBlendOp = VK_BLEND_OP_ADD,
                 .srcAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
-                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ZERO,
+                .dstAlphaBlendFactor = VK_BLEND_FACTOR_ONE,
                 .alphaBlendOp = VK_BLEND_OP_ADD,
                 .colorWriteMask = VK_COLOR_COMPONENT_R_BIT | VK_COLOR_COMPONENT_G_BIT | VK_COLOR_COMPONENT_B_BIT | VK_COLOR_COMPONENT_A_BIT,
             };
@@ -1704,6 +1690,10 @@ namespace Projector
         ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
         Util::EndSingleTimeCommands(device_, commandPool_, graphicsQueue_, commandBuffer);
         ImGui_ImplVulkan_DestroyFontUploadObjects();
+
+        int width = 0, height = 0;
+        glfwGetFramebufferSize(window_, &width, &height);
+        ImGui::GetIO().FontGlobalScale = height / 720.0f;
     }
 
     void Projector::UpdateUniformBuffer(bool render)
@@ -2097,8 +2087,6 @@ namespace Projector
         }
 
         std::cout << "Recreating swapchain" << std::endl;
-
-        ImGui::GetIO().FontGlobalScale = height / 720.0f;
         renderScale_ =
             glm::tan(glm::radians(fov_ / 2.0f + overdrawDegrees_))
             / glm::tan(glm::radians(fov_ / 2.0f));
@@ -2132,7 +2120,7 @@ namespace Projector
         vkDestroyImage(device_, warpColorImage_, nullptr);
         vkFreeMemory(device_, warpColorImageMemory_, nullptr);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        for (size_t i = 0; i < resultImageViews_.size(); i++) // MAX_FRAMES_IN_FLIGHT
         {
             vkDestroyImageView(device_, resultImageViews_[i], nullptr);
             vkDestroyImage(device_, resultImages_[i], nullptr);
@@ -2149,7 +2137,7 @@ namespace Projector
         vkDestroyRenderPass(device_, renderPass_, nullptr);
         vkDestroyRenderPass(device_, warpRenderPass_, nullptr);
 
-        for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        for (size_t i = 0; i < mainFramebuffers_.size(); i++) // MAX_FRAMES_IN_FLIGHT
         {
             vkDestroyFramebuffer(device_, mainFramebuffers_[i], nullptr);
         }

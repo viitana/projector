@@ -152,20 +152,20 @@ namespace Projector
 		static void FramebufferResizeCallback(GLFWwindow* window, int width, int height);
 
 		// Instance & device
-		VkInstance vk_;
+		VkInstance vk_ = VK_NULL_HANDLE;
 		VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
 		VkDevice device_ = VK_NULL_HANDLE;
 
 		// Queues
-		VkQueue graphicsQueue_;
-		VkQueue presentQueue_;
+		VkQueue graphicsQueue_ = VK_NULL_HANDLE;
+		VkQueue presentQueue_ = VK_NULL_HANDLE;
 
 		// Window & surface
-		GLFWwindow* window_;
-		VkSurfaceKHR surface_;
+		GLFWwindow* window_ = VK_NULL_HANDLE;
+		VkSurfaceKHR surface_ = VK_NULL_HANDLE;
 
 		// Swapchain
-		VkSwapchainKHR swapChain_;
+		VkSwapchainKHR swapChain_ = VK_NULL_HANDLE;
 		std::vector<VkImage> swapChainImages_;
 		std::vector<VkImageView> swapChainImageViews_;
 		VkFormat swapChainImageFormat_;
@@ -175,19 +175,19 @@ namespace Projector
 		bool framebufferResized_ = false;
 
 		// Depth buffer/image
-		VkImage depthImage_;
-		VkDeviceMemory depthImageMemory_;
-		VkImageView depthImageView_;
+		VkImage depthImage_ = VK_NULL_HANDLE;
+		VkDeviceMemory depthImageMemory_ = VK_NULL_HANDLE;
+		VkImageView depthImageView_ = VK_NULL_HANDLE;
 
 		// MSAA / color buffer image
-		VkImage colorImage_;
-		VkDeviceMemory colorImageMemory_;
-		VkImageView colorImageView_;
+		VkImage colorImage_ = VK_NULL_HANDLE;
+		VkDeviceMemory colorImageMemory_ = VK_NULL_HANDLE;
+		VkImageView colorImageView_ = VK_NULL_HANDLE;
 
 		// Warp MSAA / color buffer image
-		VkImage warpColorImage_;
-		VkDeviceMemory warpColorImageMemory_;
-		VkImageView warpColorImageView_;
+		VkImage warpColorImage_ = VK_NULL_HANDLE;
+		VkDeviceMemory warpColorImageMemory_ = VK_NULL_HANDLE;
+		VkImageView warpColorImageView_ = VK_NULL_HANDLE;
 
 		std::vector<VkImage> resultImages_;
 		std::vector<VkDeviceMemory> resultImagesMemory_;
@@ -195,41 +195,41 @@ namespace Projector
 		VkExtent2D renderExtent_;
 
 		// Render pipeline, resource descriptors & passes
-		VkRenderPass renderPass_;
-		VkPipelineLayout pipelineLayout_;
-		VkPipeline graphicsPipeline_;
+		VkRenderPass renderPass_ = VK_NULL_HANDLE;
+		VkPipelineLayout pipelineLayout_ = VK_NULL_HANDLE;
+		VkPipeline graphicsPipeline_ = VK_NULL_HANDLE;
 
-		VkRenderPass warpRenderPass_;
-		VkPipelineLayout warpPipelineLayout_;
-		VkPipeline warpGraphicsPipeline_;
+		VkRenderPass warpRenderPass_ = VK_NULL_HANDLE;
+		VkPipelineLayout warpPipelineLayout_ = VK_NULL_HANDLE;
+		VkPipeline warpGraphicsPipeline_ = VK_NULL_HANDLE;
 
 		// Global uniform buffer(s) & descriptor sets
-		VkDescriptorSetLayout descriptorSetLayout_;
-		VkDescriptorPool descriptorPool_;
+		VkDescriptorSetLayout descriptorSetLayout_ = VK_NULL_HANDLE;
+		VkDescriptorPool descriptorPool_ = VK_NULL_HANDLE;
 		std::vector<VkDescriptorSet> descriptorSets_;
 		std::vector<VkBuffer> uniformBuffers_;
 		std::vector<VkDeviceMemory> uniformBuffersMemory_;
 		std::vector<void*> uniformBuffersMapped_;
 
-		VkDescriptorSetLayout warpDescriptorSetLayout_;
-		VkSampler warpSampler_;
+		VkDescriptorSetLayout warpDescriptorSetLayout_ = VK_NULL_HANDLE;
+		VkSampler warpSampler_ = VK_NULL_HANDLE;
 		std::vector<VkDescriptorSet> warpDescriptorSets_;
-		VkBuffer warpUniformBuffer_;
-		VkDeviceMemory warpUniformBufferMemory_;
+		VkBuffer warpUniformBuffer_ = VK_NULL_HANDLE;
+		VkDeviceMemory warpUniformBufferMemory_ = VK_NULL_HANDLE;
 		void* warpUniformBufferMapped_;
 
 		// Command buffers & syncing
-		VkCommandPool commandPool_;
+		VkCommandPool commandPool_ = VK_NULL_HANDLE;
 		std::vector<VkCommandBuffer> drawCommandBuffers_;
 		std::vector<VkSemaphore> renderReadySemaphores_;
-		VkCommandBuffer warpCommandBuffer_;
-		VkSemaphore imageAvailableSemaphore_;
-		VkSemaphore warpFinishedSemaphore_;
+		VkCommandBuffer warpCommandBuffer_ = VK_NULL_HANDLE;
+		VkSemaphore imageAvailableSemaphore_ = VK_NULL_HANDLE;
+		VkSemaphore warpFinishedSemaphore_ = VK_NULL_HANDLE;
 		std::vector<VkFence> inFlightFences_;
-		VkFence warpInFlightFence_;
+		VkFence warpInFlightFence_ = VK_NULL_HANDLE;
 
 		// UI Resources
-		VkDescriptorPool imguiPool_;
+		VkDescriptorPool imguiPool_ = VK_NULL_HANDLE;
 
 		uint32_t renderFrame_ = 0;
 		uint32_t warpFrame_ = 0;
@@ -251,7 +251,7 @@ namespace Projector
 		bool doAsyncWarp_ = true;
 		int renderFramerate_ = 60;
 		int warpFramerate_ = 120;
-		float fov_ = 70.0f;
+		float fov_ = 75.0f;
 		WarpMethod warpMethod_ = WarpMethod::ClampEdge;
 		float overdrawDegreesChange_ = 5.0f;
 		float overdrawDegrees_ = overdrawDegreesChange_;

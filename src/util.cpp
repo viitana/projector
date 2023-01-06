@@ -477,13 +477,13 @@ namespace Util
     {
         style.WindowMinSize = ImVec2(160, 20);
         style.FramePadding = ImVec2(4, 2);
-        style.ItemSpacing = ImVec2(6, 2);
+        style.WindowPadding = ImVec2(10, 10);
+        style.ItemSpacing = ImVec2(6, 4);
         style.ItemInnerSpacing = ImVec2(6, 4);
         style.Alpha = 0.95f;
-        style.WindowRounding = 4.0f;
-        style.FrameRounding = 2.0f;
+        style.WindowRounding = 0.0f;
+        style.FrameRounding = 0.0f;
         style.IndentSpacing = 6.0f;
-        style.ItemInnerSpacing = ImVec2(2, 4);
         style.ColumnsMinSpacing = 50.0f;
         style.GrabMinSize = 14.0f;
         style.GrabRounding = 16.0f;
