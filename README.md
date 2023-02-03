@@ -2,6 +2,19 @@
 
 Projector is a WIP highly experimental asynchronous reprojection demo application built on Vulkan.
 
+## Usage
+
+The application features user-controllable first-person camera view in a basic 3D scene. Also included is a user interface that can be used to control various reprojection and rendering parameters.
+
+### Controls
+
+| Key        | Use                           |
+|------------|-------------------------------|
+| Mouse move | Look around                   |
+| WASD       | Move camera/character         |
+| ALT        | Release mouse cursor (use UI) |
+| ESC        | Quit application              |
+
 ## Development
 
 ### Prerequisites
