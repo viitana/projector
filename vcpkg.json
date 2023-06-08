@@ -3,21 +3,20 @@
   "version": "0.1.0",
   "dependencies": [
     {
-      "name": "vulkan",
-      "platform": "x64"
+      "name": "vulkan"
     },
     {
-      "name": "glfw3",
-      "platform": "x64"
+      "name": "glfw3"
     },
     {
-      "name": "glm",
-      "platform": "x64"
+      "name": "glm"
+    },
+    {
+      "name": "ktx"
     },
     {
       "name": "imgui",
-      "features": ["freetype", "glfw-binding", "vulkan-binding"],
-      "platform": "x64"
+      "features": ["freetype", "glfw-binding", "vulkan-binding"]
     }
   ]
 }

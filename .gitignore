@@ -427,4 +427,9 @@ FodyWeavers.xsd
 # Local imgui configuration
 imgui.ini
 
+# vcpkg package install dir
 vcpkg_installed
+
+# build dir
+build
+
