@@ -14,7 +14,7 @@ namespace Util
         
         if (!file.is_open())
         {
-            throw std::runtime_error("failed to open file!");
+            throw std::runtime_error("failed to open file");
         }
 
         size_t fileSize = (size_t)file.tellg();
@@ -47,7 +47,7 @@ namespace Util
                 return i;
             }
         }
-        throw std::runtime_error("no suitable memory on physical device!");
+        throw std::runtime_error("no suitable memory on physical device");
     }
 
     void CreateBuffer(const VkPhysicalDevice& physicalDevice, const VkDevice& device, VkDeviceSize size, VkBufferUsageFlags usage, VkMemoryPropertyFlags properties, VkBuffer& buffer, VkDeviceMemory& bufferMemory)
@@ -111,7 +111,7 @@ namespace Util
 
         if (vkCreateImage(device, &imageInfo, nullptr, &image) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create image!");
+            throw std::runtime_error("failed to create image");
         }
 
         VkMemoryRequirements memRequirements;
@@ -126,7 +126,7 @@ namespace Util
 
         if (vkAllocateMemory(device, &allocInfo, nullptr, &imageMemory) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to allocate image memory!");
+            throw std::runtime_error("failed to allocate image memory");
         }
 
         VK_CHECK_RESULT(vkBindImageMemory(device, image, imageMemory, 0));
@@ -153,7 +153,7 @@ namespace Util
         VkImageView imageView;
         if (vkCreateImageView(device, &viewInfo, nullptr, &imageView) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create texture image view!");
+            throw std::runtime_error("failed to create texture image view");
         }
 
         return imageView;
@@ -217,7 +217,7 @@ namespace Util
         }
         else
         {
-            throw std::invalid_argument("unsupported layout transition!");
+            throw std::invalid_argument("unsupported layout transition");
         }
 
         VkImageMemoryBarrier barrier
@@ -295,7 +295,7 @@ namespace Util
         vkGetPhysicalDeviceFormatProperties(physicalDevice, imageFormat, &formatProperties);
         if (!(formatProperties.optimalTilingFeatures & VK_FORMAT_FEATURE_SAMPLED_IMAGE_FILTER_LINEAR_BIT))
         {
-            throw std::runtime_error("texture image format does not support linear blitting!");
+            throw std::runtime_error("texture image format does not support linear blitting");
         }
 
         VkImageMemoryBarrier barrier

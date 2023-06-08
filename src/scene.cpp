@@ -771,7 +771,7 @@ namespace Scene
                         break;
                     }
                     default:
-                        std::cerr << "Index component type " << accessor.componentType << " not supported!" << std::endl;
+                        std::cerr << "Index component type " << accessor.componentType << " not supported" << std::endl;
                         return;
                     }
                 }

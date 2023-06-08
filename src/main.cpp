@@ -15,7 +15,7 @@ int main(int argc, char* argv[])
         Projector::Projector app;
         app.Run();
     }
-    catch (std::exception e)
+    catch (std::exception& e)
     {
         std::cout << "Caught exception: '" << e.what() << "'" << std::endl;
     }

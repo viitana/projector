@@ -18,7 +18,7 @@ namespace Projector
 
         if (!glfwInit())
         {
-            throw std::runtime_error("failed to initialize glfw!");
+            throw std::runtime_error("failed to initialize glfw");
         }
 
         CreateInstance();
@@ -430,7 +430,7 @@ namespace Projector
         VkShaderModule shaderModule;
         if (vkCreateShaderModule(device_, &createInfo, nullptr, &shaderModule) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create shader module!");
+            throw std::runtime_error("failed to create shader module");
         }
         return shaderModule;
     }
@@ -451,7 +451,7 @@ namespace Projector
                 return format;
             }
         }
-        throw std::runtime_error("failed to find supported format!");
+        throw std::runtime_error("failed to find supported format");
     }
 
     const VkFormat Projector::FindDepthFormat() const
@@ -491,16 +491,16 @@ namespace Projector
     {
         if (!CheckValidationLayerSupport())
         {
-            throw std::runtime_error("validation layers not available!");
+            throw std::runtime_error("validation layers not available");
         }
 
         VkApplicationInfo appInfo
         {
             .sType = VK_STRUCTURE_TYPE_APPLICATION_INFO,
             .pApplicationName = "projector",
-            .applicationVersion = VK_MAKE_VERSION(VERSION_MAJOR, VERSION_MINOR, 0),
+            .applicationVersion = VK_MAKE_API_VERSION(0, VERSION_MAJOR, VERSION_MINOR, 0),
             .pEngineName = "No Engine",
-            .engineVersion = VK_MAKE_VERSION(1, 0, 0),
+            .engineVersion = VK_MAKE_API_VERSION(0, 1, 0, 0),
             .apiVersion = VK_API_VERSION_1_3,
         };
 
@@ -520,7 +520,7 @@ namespace Projector
 
         if (vkCreateInstance(&createInfo, nullptr, &vk_) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create instance!");
+            throw std::runtime_error("failed to create instance");
         }
     }
 
@@ -528,10 +528,10 @@ namespace Projector
     {
         glfwWindowHint(GLFW_CLIENT_API, GLFW_NO_API);
 
-        window_ = glfwCreateWindow(1920, 1080, "projector", nullptr, nullptr);
+        window_ = glfwCreateWindow(1280, 720, "projector", nullptr, nullptr);
         if (window_ == nullptr)
         {
-            throw std::runtime_error("failed to create window!");
+            throw std::runtime_error("failed to create window");
         }
         glfwSetWindowUserPointer(window_, this);
         glfwSetFramebufferSizeCallback(window_, FramebufferResizeCallback);
@@ -539,7 +539,7 @@ namespace Projector
         VkResult result = glfwCreateWindowSurface(vk_, window_, nullptr, &surface_);
         if (result != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create window surface!");
+            throw std::runtime_error("failed to create window surface");
         }
     }
 
@@ -549,7 +549,7 @@ namespace Projector
         vkEnumeratePhysicalDevices(vk_, &deviceCount, nullptr);
         if (deviceCount == 0)
         {
-            throw std::runtime_error("failed to find GPUs with Vulkan support!");
+            throw std::runtime_error("failed to find GPUs with Vulkan support");
         }
 
         uint32_t glfwExtensionCount = 0;
@@ -615,7 +615,7 @@ namespace Projector
 
         if (physicalDevice_ == VK_NULL_HANDLE)
         {
-            throw std::runtime_error("failed to find a suitable GPU!");
+            throw std::runtime_error("failed to find a suitable GPU");
         }
         std::cout << "Picked device \"" << deviceName << "\"" << std::endl;
     }
@@ -677,7 +677,7 @@ namespace Projector
 
         if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create logical device!");
+            throw std::runtime_error("failed to create logical device");
         }
 
         vkGetDeviceQueue(device_, queueFamilies.graphicsFamily.value(), 0, &graphicsQueue_);
@@ -741,7 +741,7 @@ namespace Projector
 
         if (vkCreateSwapchainKHR(device_, &createInfo, nullptr, &swapChain_) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create swap chain!");
+            throw std::runtime_error("failed to create swap chain");
         }
 
         vkGetSwapchainImagesKHR(device_, swapChain_, &imageCount, nullptr);
@@ -887,7 +887,7 @@ namespace Projector
 
             if (vkCreateRenderPass2(device_, &renderPassInfo, nullptr, &renderPass_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create render pass!");
+                throw std::runtime_error("failed to create render pass");
             }
         }
 
@@ -959,7 +959,7 @@ namespace Projector
 
             if (vkCreateRenderPass(device_, &renderPassInfo, nullptr, &warpRenderPass_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create warp render pass!");
+                throw std::runtime_error("failed to create warp render pass");
             }
         }
     }
@@ -1077,7 +1077,7 @@ namespace Projector
 
             if (vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &pipelineLayout_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create pipeline layout!");
+                throw std::runtime_error("failed to create pipeline layout");
             }
 
             VkPipelineDepthStencilStateCreateInfo depthStencil
@@ -1126,7 +1126,7 @@ namespace Projector
             VkResult result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &graphicsPipeline_);
             if (result != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create graphics pipeline!");
+                throw std::runtime_error("failed to create graphics pipeline");
             }
 
             vkDestroyShaderModule(device_, fragShaderModule, nullptr);
@@ -1243,7 +1243,7 @@ namespace Projector
 
             if (vkCreatePipelineLayout(device_, &pipelineLayoutInfo, nullptr, &warpPipelineLayout_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create pipeline layout!");
+                throw std::runtime_error("failed to create pipeline layout");
             }
 
             VkPipelineDepthStencilStateCreateInfo depthStencil
@@ -1296,7 +1296,7 @@ namespace Projector
             VkResult result = vkCreateGraphicsPipelines(device_, VK_NULL_HANDLE, 1, &pipelineInfo, nullptr, &warpGraphicsPipeline_);
             if (result != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create graphics pipeline!");
+                throw std::runtime_error("failed to create graphics pipeline");
             }
 
             vkDestroyShaderModule(device_, fragShaderModule, nullptr);
@@ -1317,7 +1317,7 @@ namespace Projector
 
         if (vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create command pool!");
+            throw std::runtime_error("failed to create command pool");
         }
     }
 
@@ -1468,7 +1468,7 @@ namespace Projector
 
                 if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &mainFramebuffers_[i]) != VK_SUCCESS)
                 {
-                    throw std::runtime_error("failed to create framebuffer!");
+                    throw std::runtime_error("failed to create framebuffer");
                 }
             }
         }
@@ -1495,7 +1495,7 @@ namespace Projector
 
                 if (vkCreateFramebuffer(device_, &framebufferInfo, nullptr, &warpFramebuffers_[i]) != VK_SUCCESS)
                 {
-                    throw std::runtime_error("failed to create framebuffer!");
+                    throw std::runtime_error("failed to create framebuffer");
                 }
             }
         }
@@ -1552,7 +1552,7 @@ namespace Projector
 
         if (vkCreateSampler(device_, &samplerInfo, nullptr, &warpSampler_) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create texture sampler!");
+            throw std::runtime_error("failed to create texture sampler");
         }
     }
 
@@ -1579,7 +1579,7 @@ namespace Projector
             VkResult result = vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &descriptorSetLayout_);
             if (result != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create descriptor set layout!");
+                throw std::runtime_error("failed to create descriptor set layout");
             }
         }
 
@@ -1614,7 +1614,7 @@ namespace Projector
             VkResult result = vkCreateDescriptorSetLayout(device_, &layoutInfo, nullptr, &warpDescriptorSetLayout_);
             if (result != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to create descriptor set layout!");
+                throw std::runtime_error("failed to create descriptor set layout");
             }
         }
     }
@@ -1645,7 +1645,7 @@ namespace Projector
 
         if (vkCreateDescriptorPool(device_, &poolInfo, nullptr, &descriptorPool_) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to create descriptor pool!");
+            throw std::runtime_error("failed to create descriptor pool");
         }
     }
 
@@ -1666,7 +1666,7 @@ namespace Projector
             descriptorSets_.resize(MAX_FRAMES_IN_FLIGHT);
             if (vkAllocateDescriptorSets(device_, &allocInfo, descriptorSets_.data()) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to allocate descriptor sets!");
+                throw std::runtime_error("failed to allocate descriptor sets");
             }
 
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -1710,7 +1710,7 @@ namespace Projector
             const VkResult result = vkAllocateDescriptorSets(device_, &allocInfo, warpDescriptorSets_.data());
             if (result != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to allocate warp descriptor sets!");
+                throw std::runtime_error("failed to allocate warp descriptor sets");
             }
 
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -1773,7 +1773,7 @@ namespace Projector
 
             if (vkAllocateCommandBuffers(device_, &allocInfo, drawCommandBuffers_.data()) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to allocate command buffers!");
+                throw std::runtime_error("failed to allocate command buffers");
             }
         }
         // Warp
@@ -1788,7 +1788,7 @@ namespace Projector
 
             if (vkAllocateCommandBuffers(device_, &allocInfo, &warpCommandBuffer_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to allocate warp command buffers!");
+                throw std::runtime_error("failed to allocate warp command buffers");
             }
         }
     }
@@ -2011,7 +2011,7 @@ namespace Projector
 
             if (vkQueueSubmit(graphicsQueue_, 1, &submitInfo, inFlightFences_[renderFrame_]) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to submit draw command buffer!");
+                throw std::runtime_error("failed to submit draw command buffer");
             }
         }
 
@@ -2037,7 +2037,7 @@ namespace Projector
         }
         else if (result != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to acquire swap chain image!");
+            throw std::runtime_error("failed to acquire swap chain image");
         }
 
         vkResetFences(device_, 1, &warpInFlightFence_);
@@ -2069,7 +2069,7 @@ namespace Projector
 
             if (vkQueueSubmit(warpQueue_, 1, &submitInfo, warpInFlightFence_) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to submit warp command buffer!");
+                throw std::runtime_error("failed to submit warp command buffer");
             }
 
             warpFrame_ = nextFrame;
@@ -2105,7 +2105,7 @@ namespace Projector
         }
         else if (result != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to present swap chain image!");
+            throw std::runtime_error("failed to present swap chain image");
         }
     }
 
@@ -2120,7 +2120,7 @@ namespace Projector
 
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to begin recording command buffer!");
+            throw std::runtime_error("failed to begin recording command buffer");
         }
 
         std::array<VkClearValue, 2> clearValues
@@ -2192,7 +2192,7 @@ namespace Projector
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to record command buffer!");
+            throw std::runtime_error("failed to record command buffer");
         }
     }
 
@@ -2207,7 +2207,7 @@ namespace Projector
 
         if (vkBeginCommandBuffer(commandBuffer, &beginInfo) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to begin recording warp command buffer!");
+            throw std::runtime_error("failed to begin recording warp command buffer");
         }
 
         std::array<VkClearValue, 2> clearValues
@@ -2271,7 +2271,7 @@ namespace Projector
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
-            throw std::runtime_error("failed to record command buffer!");
+            throw std::runtime_error("failed to record command buffer");
         }
     }
 
