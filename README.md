@@ -20,11 +20,26 @@ The application features user-controllable first-person camera view in a basic 3
 
 ### Prerequisites
 
+#### Hardware
+
+A graphics card with Vulkan 1.3 and [variable rate shading support](https://registry.khronos.org/vulkan/specs/1.3-extensions/man/html/VK_KHR_fragment_shading_rate.html). A non-exhaustive and largely untested list of suitable cards:
+
+- Nvidia: Turing architecture or newer
+  - GeForce 20/16 series or newer
+  - Quadro RTX 3000 or newer
+- AMD: RDNA 2 architecture or newer
+  - Radeon RX 6000 or newer
+  - Radeon Pro W6000 or newer
+- Intel: Xe (Gen12) architecture or newer
+  - Arc 300/700 series or newer
+  - UHD Graphics 700 series or newer
+  - Iris Xe Graphics G7 or newer
+
 #### Tools
 - CMake: [`https://cmake.org/download`](https://cmake.org/download)
 - (Highly recommended) vcpkg: [`https://github.com/microsoft/vcpkg`](https://github.com/microsoft/vcpkg)
 
-### SDKs
+#### SDKs
 - Vulkan SDK: [`https://vulkan.lunarg.com`](https://vulkan.lunarg.com)
 
 #### Libraries
