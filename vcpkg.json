@@ -1,6 +1,8 @@
 {
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
   "name": "projector",
   "version": "0.1.0",
+  "builtin-baseline": "0c20b2a97c390e106150837042d921b0939e7ecb",
   "dependencies": [
     {
       "name": "vulkan"

@@ -591,7 +591,7 @@ namespace Projector
 
                 physicalDevice_ = device;
                 msaaSamples_ = GetMaxUsableSampleCount(device);
-                msaaSamples_ = VK_SAMPLE_COUNT_2_BIT;
+                // msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
                 deviceName = deviceProperties.properties.deviceName;
                 shadingRateProperties_ = shadingRateProperties;
 
@@ -787,25 +787,6 @@ namespace Projector
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
 
-            VkAttachmentDescription2 depthAttachment
-            {
-                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
-                .format = FindDepthFormat(),
-                .samples = msaaSamples_,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            };
-            VkAttachmentReference2 depthAttachmentRef
-            {
-                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
-                .attachment = 1,
-                .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
-            };
-
             VkAttachmentDescription2 colorAttachmentResolve
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
@@ -821,11 +802,57 @@ namespace Projector
             VkAttachmentReference2 colorAttachmentResolveRef
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
-                .attachment = 2,
+                .attachment = 1,
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
 
-            VkAttachmentDescription2 shadingRateAttachmentResolve
+            VkAttachmentDescription2 depthAttachment
+            {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
+                .format = FindDepthFormat(),
+                .samples = msaaSamples_,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, //VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+            VkAttachmentReference2 depthAttachmentRef
+            {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+                .attachment = 2,
+                .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+
+            VkAttachmentDescription2 depthAttachmentResolve
+            {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
+                .format = FindDepthFormat(),
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, //VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+            VkAttachmentReference2 depthAttachmentResolveRef
+            {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+                .attachment = 3,
+                .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+            VkSubpassDescriptionDepthStencilResolve depthStencilResolveInfo =
+            {
+                .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE,
+                .pNext = nullptr,
+                .depthResolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
+                .stencilResolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
+                .pDepthStencilResolveAttachment = &depthAttachmentResolveRef,
+            };
+
+            VkAttachmentDescription2 shadingRateAttachment
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
                 .format = VK_FORMAT_R8_UINT,
@@ -837,17 +864,18 @@ namespace Projector
                 .initialLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
                 .finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
             };
-            VkAttachmentReference2 shadingRateAttachmentResolveRef
+            VkAttachmentReference2 shadingRateAttachmentRef
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
-                .attachment = 3,
+                .attachment = 4,
                 .layout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
             };
 
             VkFragmentShadingRateAttachmentInfoKHR shadingRateAttachmentInfo =
             {
                 .sType = VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR,
-                .pFragmentShadingRateAttachment = &shadingRateAttachmentResolveRef,
+                .pNext = &depthStencilResolveInfo,
+                .pFragmentShadingRateAttachment = &shadingRateAttachmentRef,
                 .shadingRateAttachmentTexelSize = shadingRateProperties_.maxFragmentShadingRateAttachmentTexelSize,
             };
 
@@ -873,7 +901,7 @@ namespace Projector
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             };
 
-            std::array<VkAttachmentDescription2, 4> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve, shadingRateAttachmentResolve };
+            std::array<VkAttachmentDescription2, 5> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment, depthAttachmentResolve, shadingRateAttachment };
             VkRenderPassCreateInfo2 renderPassInfo
             {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2,
@@ -1184,7 +1212,7 @@ namespace Projector
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                 .depthClampEnable = VK_FALSE,
                 .rasterizerDiscardEnable = VK_FALSE,
-                .polygonMode = VK_POLYGON_MODE_FILL,
+                .polygonMode = VK_POLYGON_MODE_LINE,
                 .cullMode = VK_CULL_MODE_NONE,
                 .frontFace = VK_FRONT_FACE_CLOCKWISE,
                 .depthBiasEnable = VK_FALSE,
@@ -1332,7 +1360,7 @@ namespace Projector
         // Render depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
+            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
             depthImageView_ = Util::CreateImageView(device_, depthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
         // Shading rate map image
@@ -1414,8 +1442,8 @@ namespace Projector
         // Render result image
         {
             resultImages_.resize(MAX_FRAMES_IN_FLIGHT);
-            resultImageViews_.resize(MAX_FRAMES_IN_FLIGHT);
             resultImagesMemory_.resize(MAX_FRAMES_IN_FLIGHT);
+            resultImageViews_.resize(MAX_FRAMES_IN_FLIGHT);
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
                 VkFormat colorFormat = swapChainImageFormat_;
@@ -1433,6 +1461,28 @@ namespace Projector
                 );
             }
         }
+        // Render depth result image
+        {
+            resultImagesDepth_.resize(MAX_FRAMES_IN_FLIGHT);
+            resultImagesMemoryDepth_.resize(MAX_FRAMES_IN_FLIGHT);
+            resultImageViewsDepth_.resize(MAX_FRAMES_IN_FLIGHT);
+            for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+            {
+                VkFormat depthFormat = FindDepthFormat();
+                Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImagesDepth_[i], resultImagesMemoryDepth_[i]);
+                resultImageViewsDepth_[i] = Util::CreateImageView(device_, resultImagesDepth_[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+                // Util::TransitionImageLayout(
+                //     device_,
+                //     commandPool_,
+                //     graphicsQueue_,
+                //     resultImages_[i],
+                //     swapChainImageFormat_,
+                //     VK_IMAGE_LAYOUT_UNDEFINED,
+                //     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                //     1
+                // );
+            }
+        }
         // Warp color image
         {
             VkFormat colorFormat = swapChainImageFormat_;
@@ -1448,11 +1498,12 @@ namespace Projector
             mainFramebuffers_.resize(MAX_FRAMES_IN_FLIGHT);
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
-                std::array<VkImageView, 4> attachments =
+                std::array<VkImageView, 5> attachments =
                 {
                     colorImageView_,
-                    depthImageView_,
                     resultImageViews_[i],
+                    depthImageView_,
+                    resultImageViewsDepth_[i],
                     shadingRateImageView_,
                 };
                 VkFramebufferCreateInfo framebufferInfo
@@ -1554,6 +1605,31 @@ namespace Projector
         {
             throw std::runtime_error("failed to create texture sampler");
         }
+
+        VkSamplerCreateInfo samplerDepthInfo
+        {
+            .sType = VK_STRUCTURE_TYPE_SAMPLER_CREATE_INFO,
+            .magFilter = VK_FILTER_LINEAR,
+            .minFilter = VK_FILTER_LINEAR,
+            .mipmapMode = VK_SAMPLER_MIPMAP_MODE_LINEAR,
+            .addressModeU = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
+            .mipLodBias = 0.0f, // Optional
+            .anisotropyEnable = VK_TRUE,
+            .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
+            .compareEnable = VK_FALSE,
+            .compareOp = VK_COMPARE_OP_ALWAYS,
+            .minLod = 0, // Optional
+            .maxLod = 0,
+            .borderColor = VK_BORDER_COLOR_INT_OPAQUE_BLACK,
+            .unnormalizedCoordinates = VK_FALSE,
+        };
+
+        if (vkCreateSampler(device_, &samplerDepthInfo, nullptr, &warpSamplerDepth_) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create texture sampler");
+        }
     }
 
     void Projector::CreateDescriptorSetLayout()
@@ -1603,7 +1679,16 @@ namespace Projector
                 .pImmutableSamplers = nullptr,
             };
 
-            std::array<VkDescriptorSetLayoutBinding, 2> bindings = { warpUboLayoutBinding, warpSamplerLayoutBinding };
+            VkDescriptorSetLayoutBinding warpSamplerDepthLayoutBinding
+            {
+                .binding = 2,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
+                .pImmutableSamplers = nullptr,
+            };
+
+            std::array<VkDescriptorSetLayoutBinding, 3> bindings = { warpUboLayoutBinding, warpSamplerLayoutBinding, warpSamplerDepthLayoutBinding };
             VkDescriptorSetLayoutCreateInfo layoutInfo
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -1728,8 +1813,15 @@ namespace Projector
                     .imageView = resultImageViews_[i],
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 };
+                
+                VkDescriptorImageInfo depthImageInfo
+                {
+                    .sampler = warpSamplerDepth_,
+                    .imageView = resultImageViewsDepth_[i],
+                    .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                };
 
-                std::array<VkWriteDescriptorSet, 2> descriptorWrites
+                std::array<VkWriteDescriptorSet, 3> descriptorWrites
                 {
                     VkWriteDescriptorSet
                     {
@@ -1751,6 +1843,16 @@ namespace Projector
                         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                         .pImageInfo = &imageInfo,
                     },
+                    VkWriteDescriptorSet
+                    {
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = warpDescriptorSets_[i],
+                        .dstBinding = 2,
+                        .dstArrayElement = 0,
+                        .descriptorCount = 1,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        .pImageInfo = &depthImageInfo,
+                    }
                 };
                 vkUpdateDescriptorSets(device_, static_cast<uint32_t>(descriptorWrites.size()), descriptorWrites.data(), 0, nullptr);
             }
@@ -1884,9 +1986,9 @@ namespace Projector
         ImGui_ImplVulkan_Init(&init_info, warpRenderPass_);
 
         VkCommandBuffer commandBuffer = Util::BeginSingleTimeCommands(device_, commandPool_);
-        ImGui_ImplVulkan_CreateFontsTexture(commandBuffer);
+        ImGui_ImplVulkan_CreateFontsTexture();
         Util::EndSingleTimeCommands(device_, commandPool_, graphicsQueue_, commandBuffer);
-        ImGui_ImplVulkan_DestroyFontUploadObjects();
+        // ImGui_ImplVulkan_DestroyFontUploadObjects();
 
         int width = 0, height = 0;
         glfwGetFramebufferSize(window_, &width, &height);
@@ -2123,10 +2225,11 @@ namespace Projector
             throw std::runtime_error("failed to begin recording command buffer");
         }
 
-        std::array<VkClearValue, 2> clearValues
+        std::array<VkClearValue, 3> clearValues
         {
-            VkClearValue { .color = {{0.0f, 0.0f, 0.0f, 1.0f}} },
-            VkClearValue { .depthStencil = {.depth = 1.0f, .stencil = 0 } },
+            VkClearValue { .color = {{0.0f, 0.0f, 0.0f, 1.0f}} }, // Color
+            VkClearValue { },
+            VkClearValue { .depthStencil = {.depth = 1.0f, .stencil = 0 } }, // Depth
         };
 
         VkRenderPassBeginInfo renderPassInfo
@@ -2262,7 +2365,7 @@ namespace Projector
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        vkCmdDraw(commandBuffer, 6, 1, 0, 0);
+        vkCmdDraw(commandBuffer, 18432, 1, 0, 0);
 
         ImDrawData* draw_data = ImGui::GetDrawData();
         ImGui_ImplVulkan_RenderDrawData(draw_data, commandBuffer);

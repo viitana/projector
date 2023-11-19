@@ -26,6 +26,7 @@
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
 #define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_ENABLE_EXPERIMENTAL
+
 #include <glm/glm.hpp>
 #include <glm/gtc/matrix_transform.hpp>
 #include <glm/gtx/hash.hpp>
@@ -198,10 +199,15 @@ namespace Projector
 		VkDeviceMemory warpColorImageMemory_ = VK_NULL_HANDLE;
 		VkImageView warpColorImageView_ = VK_NULL_HANDLE;
 
+		VkExtent2D renderExtent_;
+
 		std::vector<VkImage> resultImages_;
 		std::vector<VkDeviceMemory> resultImagesMemory_;
 		std::vector<VkImageView> resultImageViews_;
-		VkExtent2D renderExtent_;
+		
+		std::vector<VkImage> resultImagesDepth_;
+		std::vector<VkDeviceMemory> resultImagesMemoryDepth_;
+		std::vector<VkImageView> resultImageViewsDepth_;
 
 		// Render pipeline, resource descriptors & passes
 		VkRenderPass renderPass_ = VK_NULL_HANDLE;
@@ -222,6 +228,7 @@ namespace Projector
 
 		VkDescriptorSetLayout warpDescriptorSetLayout_ = VK_NULL_HANDLE;
 		VkSampler warpSampler_ = VK_NULL_HANDLE;
+		VkSampler warpSamplerDepth_ = VK_NULL_HANDLE;
 		std::vector<VkDescriptorSet> warpDescriptorSets_;
 		VkBuffer warpUniformBuffer_ = VK_NULL_HANDLE;
 		VkDeviceMemory warpUniformBufferMemory_ = VK_NULL_HANDLE;
