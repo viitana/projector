@@ -8,7 +8,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBufferObject {
     float screenScale;
     float uvScale;
 } ubo;
-layout(set = 0, binding = 2) uniform sampler2D depthSampler;
+layout(set = 0, binding = 3) uniform sampler2D depthSampler;
 
 layout(location = 0) out vec2 fragTexCoord;
 
@@ -63,8 +63,13 @@ void main() {
 
     float z = rand(uv);
     
-    z = texture(depthSampler, uv).x;
-    
+    z = texture(depthSampler, uv).x; // 0 - 1
+    z = 0.001 + z * (100.0 - 0.001);
+
+    // z = 1 - z;
+    //z = z * 5;
+    // z = 0.001 + z * (100.0 - 0.001);
+
     gl_Position =
         ubo.proj *
         ubo.view *
@@ -72,7 +77,7 @@ void main() {
         vec4(
             ubo.screenScale * pos.x * aspect,
             ubo.screenScale * pos.y,
-            0,
+            z,
             1.0
         );
     fragTexCoord = (((uv - 0.5f) * ubo.uvScale) + 0.5f);

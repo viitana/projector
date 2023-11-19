@@ -816,7 +816,8 @@ namespace Projector
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, //VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                //.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             };
             VkAttachmentReference2 depthAttachmentRef
             {
@@ -828,14 +829,14 @@ namespace Projector
             VkAttachmentDescription2 depthAttachmentResolve
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
-                .format = FindDepthFormat(),
+                .format = FindDepthFormat(), //FindDepthFormat(),
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL, //VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, //VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             };
             VkAttachmentReference2 depthAttachmentResolveRef
             {
@@ -1213,6 +1214,7 @@ namespace Projector
                 .depthClampEnable = VK_FALSE,
                 .rasterizerDiscardEnable = VK_FALSE,
                 .polygonMode = VK_POLYGON_MODE_LINE,
+                //.polygonMode = VK_POLYGON_MODE_FILL,
                 .cullMode = VK_CULL_MODE_NONE,
                 .frontFace = VK_FRONT_FACE_CLOCKWISE,
                 .depthBiasEnable = VK_FALSE,
@@ -1471,16 +1473,16 @@ namespace Projector
                 VkFormat depthFormat = FindDepthFormat();
                 Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImagesDepth_[i], resultImagesMemoryDepth_[i]);
                 resultImageViewsDepth_[i] = Util::CreateImageView(device_, resultImagesDepth_[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-                // Util::TransitionImageLayout(
-                //     device_,
-                //     commandPool_,
-                //     graphicsQueue_,
-                //     resultImages_[i],
-                //     swapChainImageFormat_,
-                //     VK_IMAGE_LAYOUT_UNDEFINED,
-                //     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                //     1
-                // );
+                Util::TransitionImageLayout(
+                    device_,
+                    commandPool_,
+                    graphicsQueue_,
+                    resultImages_[i],
+                    FindDepthFormat(),
+                    VK_IMAGE_LAYOUT_UNDEFINED,
+                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                    1
+                );
             }
         }
         // Warp color image
@@ -1661,7 +1663,7 @@ namespace Projector
 
         // Warp
         {
-            VkDescriptorSetLayoutBinding warpUboLayoutBinding
+            VkDescriptorSetLayoutBinding warpUboLayoutBinding // State params for vectex stage
             {
                 .binding = 0,
                 .descriptorType = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
@@ -1670,7 +1672,7 @@ namespace Projector
                 .pImmutableSamplers = nullptr, // Optional
             };
 
-            VkDescriptorSetLayoutBinding warpSamplerLayoutBinding
+            VkDescriptorSetLayoutBinding warpSamplerLayoutBinding // Rendered image for fragment stage
             {
                 .binding = 1,
                 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
@@ -1679,16 +1681,25 @@ namespace Projector
                 .pImmutableSamplers = nullptr,
             };
 
-            VkDescriptorSetLayoutBinding warpSamplerDepthLayoutBinding
+            VkDescriptorSetLayoutBinding warpSamplerDepthLayoutBindingFragment // Depth image for fragment stage
             {
                 .binding = 2,
+                .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                .descriptorCount = 1,
+                .stageFlags = VK_SHADER_STAGE_FRAGMENT_BIT,
+                .pImmutableSamplers = nullptr,
+            };
+
+            VkDescriptorSetLayoutBinding warpSamplerDepthLayoutBindingVertex // Depth image for vertex stage
+            {
+                .binding = 3,
                 .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
                 .descriptorCount = 1,
                 .stageFlags = VK_SHADER_STAGE_VERTEX_BIT,
                 .pImmutableSamplers = nullptr,
             };
 
-            std::array<VkDescriptorSetLayoutBinding, 3> bindings = { warpUboLayoutBinding, warpSamplerLayoutBinding, warpSamplerDepthLayoutBinding };
+            std::array<VkDescriptorSetLayoutBinding, 4> bindings = { warpUboLayoutBinding, warpSamplerLayoutBinding, warpSamplerDepthLayoutBindingFragment, warpSamplerDepthLayoutBindingVertex };
             VkDescriptorSetLayoutCreateInfo layoutInfo
             {
                 .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_SET_LAYOUT_CREATE_INFO,
@@ -1818,10 +1829,10 @@ namespace Projector
                 {
                     .sampler = warpSamplerDepth_,
                     .imageView = resultImageViewsDepth_[i],
-                    .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                    .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 };
 
-                std::array<VkWriteDescriptorSet, 3> descriptorWrites
+                std::array<VkWriteDescriptorSet, 4> descriptorWrites
                 {
                     VkWriteDescriptorSet
                     {
@@ -1848,6 +1859,16 @@ namespace Projector
                         .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
                         .dstSet = warpDescriptorSets_[i],
                         .dstBinding = 2,
+                        .dstArrayElement = 0,
+                        .descriptorCount = 1,
+                        .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
+                        .pImageInfo = &depthImageInfo,
+                    },
+                    VkWriteDescriptorSet
+                    {
+                        .sType = VK_STRUCTURE_TYPE_WRITE_DESCRIPTOR_SET,
+                        .dstSet = warpDescriptorSets_[i],
+                        .dstBinding = 3,
                         .dstArrayElement = 0,
                         .descriptorCount = 1,
                         .descriptorType = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
