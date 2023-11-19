@@ -45,8 +45,6 @@ namespace Projector
         RecreateSwapChain();
         InitImGui();
 
-        CreateGraphicsPipeline();
-
         CreateCommandBuffers();
         CreateSyncObjects();
     }
@@ -131,54 +129,78 @@ namespace Projector
 
                     bool doRecreateSwapchain = false;
 
-                    ImGui::Begin("Settings", nullptr,
-                        ImGuiWindowFlags_NoResize |
-                        ImGuiWindowFlags_NoMove |
-                        ImGuiWindowFlags_AlwaysAutoResize
-                    );
-                    ImGui::SetWindowPos(ImVec2(swapChainExtent_.width - ImGui::GetWindowSize().x, 0));
-
-                    ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Rendering");
-                    ImGui::Spacing();
-                    ImGui::Spacing();
-                    ImGui::Indent(12.0f);
-                    ImGui::Checkbox("Render", &doRender_);
-                    ImGui::SliderInt("Render framerate", &renderFramerate_, 1, 120);
-                    ImGui::SliderFloat("Field of view", &fov_, 0, MAX_VFOV_DEG - overdrawDegreesChange_);
-                    ImGui::Indent(-12.0f);
-
-                    ImGui::Spacing();
-                    ImGui::Spacing();
-                    ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Asynchronous timewarp");
-                    ImGui::Spacing();
-                    ImGui::Spacing();
-                    ImGui::Indent(12.0f);
-                    ImGui::Checkbox("Enabled", &doAsyncWarp_);
-                    ImGui::SliderInt("Warp framerate", &warpFramerate_, 1, 120);
-                    ImGui::SliderFloat("Overdraw", &overdrawDegreesChange_, 0, MAX_VFOV_DEG - fov_, "%.1f degrees");
-                    if (ImGui::IsItemDeactivatedAfterEdit())
                     {
-                        doRecreateSwapchain = true;
-                        overdrawDegrees_ = overdrawDegreesChange_;
-                    }
-                    if (ImGui::BeginCombo("Variable rate shade overdraw", VariableRateShadingNames[variableRateShadingMode_]))
-                    {
-                        for (int n = 0; n < VariableRateShadingNames.size(); n++)
+                        ImGui::Begin("Settings", nullptr,
+                            ImGuiWindowFlags_NoResize |
+                            ImGuiWindowFlags_NoMove |
+                            ImGuiWindowFlags_AlwaysAutoResize
+                        );
+                        ImGui::SetWindowPos(ImVec2(swapChainExtent_.width - ImGui::GetWindowSize().x, 0));
+
+                        ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Rendering");
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+                        ImGui::Indent(12.0f);
+                        ImGui::Checkbox("Render", &doRender_);
+                        ImGui::SliderInt("Render framerate", &renderFramerate_, 1, 120);
+                        ImGui::SliderFloat("Field of view", &fov_, 0, MAX_VFOV_DEG - overdrawDegreesChange_);
+                        ImGui::Indent(-12.0f);
+
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Asynchronous timewarp");
+                        ImGui::Spacing();
+                        ImGui::Spacing();
+                        ImGui::Indent(12.0f);
+                        ImGui::Checkbox("Enabled", &doAsyncWarp_);
+                        ImGui::SliderInt("Warp framerate", &warpFramerate_, 1, 120);
+                        ImGui::SliderFloat("Overdraw", &overdrawDegreesChange_, 0, MAX_VFOV_DEG - fov_, "%.1f degrees");
+                        if (ImGui::IsItemDeactivatedAfterEdit())
                         {
-                            bool is_selected = variableRateShadingMode_ == n;
-                            if (ImGui::Selectable(VariableRateShadingNames[n], is_selected))
-                            {
-                                variableRateShadingMode_ = (VariableRateShadingMode)n;
-                                doRecreateSwapchain = true;
-                            }
-                            if (is_selected) ImGui::SetItemDefaultFocus();
+                            doRecreateSwapchain = true;
+                            overdrawDegrees_ = overdrawDegreesChange_;
                         }
-                        ImGui::EndCombo();
-                    }
-                    ImGui::SliderFloat("Clamp image to edge", &clampOvershootPercent_, 0, 100, "%.0f%%");
-                    ImGui::Indent(-12.0f);
+                        if (ImGui::BeginCombo("Variable rate shade overdraw", VariableRateShadingNames[variableRateShadingMode_]))
+                        {
+                            for (int n = 0; n < VariableRateShadingNames.size(); n++)
+                            {
+                                bool is_selected = variableRateShadingMode_ == n;
+                                if (ImGui::Selectable(VariableRateShadingNames[n], is_selected))
+                                {
+                                    variableRateShadingMode_ = (VariableRateShadingMode)n;
+                                    doRecreateSwapchain = true;
+                                }
+                                if (is_selected) ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
+                        }
+                        ImGui::SliderFloat("Clamp image to edge", &clampOvershootPercent_, 0, 100, "%.0f%%");
+                        ImGui::SliderFloat("Depth visualization", &depthBlend_, 0, 1);
+                        if (ImGui::Checkbox("Wireframe", &wireFrame_))
+                        {
+                            doRecreateSwapchain = true;
+                        }
+                        ImGui::Indent(-12.0f);
 
-                    ImGui::End();
+                        ImGui::End();
+                    }
+
+                    {
+                        ImGui::Begin("Debug", nullptr,
+                            ImGuiWindowFlags_NoResize |
+                            ImGuiWindowFlags_NoMove |
+                            ImGuiWindowFlags_AlwaysAutoResize
+                        );
+                        ImGui::SetWindowPos(ImVec2(0, 0));
+
+                        ImGui::Text("render position - x: %f y: %f z: %f", playerRender_.position.x, playerRender_.position.y, playerRender_.position.z);
+                        ImGui::Text("warp   position - x: %f y: %f z: %f", playerWarp_.position.x, playerWarp_.position.y, playerWarp_.position.z);
+
+                        ImGui::Text("render rotation - x: %f y: %f z: %f", playerRender_.rotation.x, playerRender_.rotation.y, 0);
+                        ImGui::Text("warp   rotation - x: %f y: %f z: %f", playerWarp_.rotation.x, playerWarp_.rotation.y, 0);
+
+                        ImGui::End();
+                    }
 
                     // Compute setting-dependent variables
                     {
@@ -1213,8 +1235,8 @@ namespace Projector
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                 .depthClampEnable = VK_FALSE,
                 .rasterizerDiscardEnable = VK_FALSE,
-                .polygonMode = VK_POLYGON_MODE_LINE,
-                //.polygonMode = VK_POLYGON_MODE_FILL,
+                // .polygonMode = VK_POLYGON_MODE_LINE,
+                .polygonMode = wireFrame_ ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
                 .cullMode = VK_CULL_MODE_NONE,
                 .frontFace = VK_FRONT_FACE_CLOCKWISE,
                 .depthBiasEnable = VK_FALSE,
@@ -2029,64 +2051,68 @@ namespace Projector
         Input::UserInput input = Input::InputHandler::GetInput(deltaTime);
 
         glm::vec3 relativeMovement =
-            glm::eulerAngleY(playerWarp_.rotation.x) *
-            glm::vec4(input.moveDelta.x, 0, input.moveDelta.y, 0);
+            glm::eulerAngleY(playerWarp_.rotation.y) *
+            glm::vec4(input.moveDelta, 0);
 
         playerWarp_.position += relativeMovement;
-        playerWarp_.rotation.x += input.mouseDelta.x;
-        playerWarp_.rotation.y += input.mouseDelta.y;
+        playerWarp_.rotation.x -= input.mouseDelta.y;
+        playerWarp_.rotation.y -= input.mouseDelta.x;
 
         if (render)
         {
             playerRender_ = playerWarp_;
         }
 
-        glm::mat4 rotation = glm::eulerAngleYX(
-            playerRender_.rotation.x,
-            playerRender_.rotation.y
+        glm::mat4 renderRotation = glm::eulerAngleYX(
+            playerRender_.rotation.y,
+            playerRender_.rotation.x
         );
-        glm::mat4 rotationI = glm::eulerAngleYX(
-            -playerRender_.rotation.x,
-            -playerRender_.rotation.y
+        glm::mat4 warpRotation = glm::eulerAngleYX(
+            playerWarp_.rotation.y,
+            playerWarp_.rotation.x
         );
-        glm::mat4 rotationw = glm::eulerAngleYX(
-            -playerWarp_.rotation.x ,
-            -playerWarp_.rotation.y
+
+        glm::mat4 renderView = glm::lookAt(
+            playerRender_.position,
+            playerRender_.position + glm::vec3(renderRotation * glm::vec4(0, 0, -1, 0)),
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
+        glm::mat4 warpView = glm::lookAt(
+            playerWarp_.position,
+            playerWarp_.position + glm::vec3(warpRotation * glm::vec4(0, 0, -1, 0)),
+            glm::vec3(0.0f, 1.0f, 0.0f)
+        );
+
+        glm::mat4 perspective = glm::perspective(
+            glm::radians(renderFov_),
+            swapChainExtent_.width / (float)swapChainExtent_.height,
+            0.01f,
+            100.0f
+        );
+        perspective[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
+        glm::mat4 inversePerspective = glm::inverse(perspective);
+
+        glm::mat4 screen = glm::translate(
+            glm::mat4(1.0f),
+            playerRender_.position
         );
 
         UniformBufferObject mainUbo
         {
-            .view = glm::lookAt(
-                glm::vec3(0, 1.2f, 0) + playerWarp_.position,
-                glm::vec3(0, 1.2f, 0) + playerWarp_.position + glm::vec3(rotation * glm::vec4(0, 0, 1, 0)),
-                glm::vec3(0.0f, 1.0f, 0.0f)
-            ),
-            .proj = glm::perspective(
-                glm::radians(renderFov_),
-                swapChainExtent_.width / (float)swapChainExtent_.height,
-                0.01f,
-                100.0f
-            ),
+            .view = renderView,
+            .proj = perspective,
         };
-        mainUbo.proj[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
         memcpy(uniformBuffersMapped_[renderFrame_], &mainUbo, sizeof(mainUbo));
 
         WarpUniformBufferObject warpUbo
         {
-            .view = glm::lookAt(
-                glm::vec3(0.0f, 0.0f, 0.0f),
-                glm::vec3(0.0f, 0.0f, 0.0f) + glm::vec3(rotationw * glm::vec4(0, 0, 1, 0)),
-                glm::vec3(0.0f, 1.0f, 0.0f)
-            ),
-            .proj = glm::perspective(
-                glm::radians(fov_),
-                swapChainExtent_.width / (float)swapChainExtent_.height,
-                0.001f,
-                100.0f
-            ),
-            .screen = rotationI * glm::translate(glm::mat4(1.0f), glm::vec3(0, 0, 1)),
+            .view = warpView,
+            .proj = perspective,
+            .inverseProj = inversePerspective,
+            .screen = screen * renderRotation,
             .screenScale = renderOvershotScreenScale_,
             .uvScale = renderOvershotScreenScale_ / renderScreenScale_,
+            .depthBlend = depthBlend_,
         };
         memcpy(warpUniformBufferMapped_, &warpUbo, sizeof(warpUbo));
     }
@@ -2423,6 +2449,7 @@ namespace Projector
         CreateDescriptorPool();
         CreateDescriptorSets();
         CreateFramebuffers();
+        CreateGraphicsPipeline();
     }
 
     void Projector::CleanupSwapChain()

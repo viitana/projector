@@ -1,5 +1,9 @@
 #pragma once
 
+#define GLM_FORCE_RADIANS
+#define GLM_FORCE_DEPTH_ZERO_TO_ONE
+#define GLM_ENABLE_EXPERIMENTAL
+
 #include <glm/glm.hpp>
 #include <GLFW/glfw3.h>
 
@@ -9,9 +13,8 @@ namespace Input
 {
 	struct UserInput
 	{
-		glm::vec2 mousePos;
 		glm::vec2 mouseDelta;
-		glm::vec2 moveDelta;
+		glm::vec3 moveDelta;
 	};
 
 	class InputHandler

@@ -31,8 +31,8 @@ namespace Input
 	{
 		UserInput input =
 		{
-			.mousePos = mousePos_,
 			.mouseDelta = mouseDelta_,
+			.moveDelta = glm::vec3(0, 0, 0)
 		};
 
 		mouseDisabled_ = glfwGetKey(window_, GLFW_KEY_LEFT_ALT);
@@ -44,10 +44,10 @@ namespace Input
 
 		if (!mouseDisabled_)
 		{
-			if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) input.moveDelta.y += 3.0f * deltaTime;
 			if (glfwGetKey(window_, GLFW_KEY_A) == GLFW_PRESS) input.moveDelta.x -= 3.0f * deltaTime;
-			if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) input.moveDelta.y -= 3.0f * deltaTime;
 			if (glfwGetKey(window_, GLFW_KEY_D) == GLFW_PRESS) input.moveDelta.x += 3.0f * deltaTime;
+			if (glfwGetKey(window_, GLFW_KEY_W) == GLFW_PRESS) input.moveDelta.z -= 3.0f * deltaTime;
+			if (glfwGetKey(window_, GLFW_KEY_S) == GLFW_PRESS) input.moveDelta.z += 3.0f * deltaTime;
 		}
 		mouseDelta_ = {};
 

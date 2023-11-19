@@ -24,7 +24,6 @@
 
 #define GLM_FORCE_RADIANS
 #define GLM_FORCE_DEPTH_ZERO_TO_ONE
-#define GLM_FORCE_DEFAULT_ALIGNED_GENTYPES
 #define GLM_ENABLE_EXPERIMENTAL
 
 #include <glm/glm.hpp>
@@ -75,9 +74,11 @@ namespace Projector
 	{
 		alignas(16) glm::mat4 view;
 		alignas(16) glm::mat4 proj;
+		alignas(16) glm::mat4 inverseProj;
 		alignas(16) glm::mat4 screen;
 		alignas(4) float screenScale;
 		alignas(4) float uvScale;
+		alignas(4) float depthBlend;
 	};
 
 	struct Player
@@ -275,6 +276,8 @@ namespace Projector
 		float overdrawDegreesChange_ = 8.0f;
 		float overdrawDegrees_ = overdrawDegreesChange_;
 		float clampOvershootPercent_ = 100.0f;
+		float depthBlend_ = 0.0f;
+		bool wireFrame_ = 0.0f;
 		VariableRateShadingMode variableRateShadingMode_ = VariableRateShadingMode::FourByFour;
 
 		// General projectioon variables
@@ -287,6 +290,6 @@ namespace Projector
 
 		// Player
 		Player playerRender_ = {};
-		Player playerWarp_ = {};
+		Player playerWarp_ = { .position = glm::vec3(0, 1.2f, 0) };
 	};
 }
