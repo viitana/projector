@@ -198,10 +198,15 @@ namespace Projector
 		std::vector<VkFramebuffer> warpFramebuffers_;
 		bool framebufferResized_ = false;
 
-		// Depth buffer/image
-		VkImage depthImage_ = VK_NULL_HANDLE;
-		VkDeviceMemory depthImageMemory_ = VK_NULL_HANDLE;
-		VkImageView depthImageView_ = VK_NULL_HANDLE;
+		// Render depth buffer/image
+		VkImage renderDepthImage_ = VK_NULL_HANDLE;
+		VkDeviceMemory renderDepthImageMemory_ = VK_NULL_HANDLE;
+		VkImageView renderDepthImageView_ = VK_NULL_HANDLE;
+
+		// WArp depth buffer/image
+		VkImage warpDepthImage_ = VK_NULL_HANDLE;
+		VkDeviceMemory warpDepthImageMemory_ = VK_NULL_HANDLE;
+		VkImageView warpDepthImageView_ = VK_NULL_HANDLE;
 
 		// MSAA / color buffer image
 		VkImage colorImage_ = VK_NULL_HANDLE;

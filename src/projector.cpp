@@ -1032,6 +1032,22 @@ namespace Projector
                 .attachment = 1,
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
+            VkAttachmentDescription depthAttachment =
+            {
+                .format = FindDepthFormat(),
+                .samples = msaaSamples_,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
+                .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+            VkAttachmentReference depthAttachmentRef
+            {
+                .attachment = 2,
+                .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
 
             VkSubpassDescription subpass
             {
@@ -1039,6 +1055,7 @@ namespace Projector
                 .colorAttachmentCount = 1,
                 .pColorAttachments = &colorAttachmentRef,
                 .pResolveAttachments = &colorAttachmentResolveRef,
+                .pDepthStencilAttachment = &depthAttachmentRef,
             };
 
             VkSubpassDependency dependency
@@ -1051,7 +1068,7 @@ namespace Projector
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             };
 
-            std::array<VkAttachmentDescription, 2> attachments = { colorAttachment, colorAttachmentResolve };
+            std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment };
             VkRenderPassCreateInfo renderPassInfo
             {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -1290,9 +1307,8 @@ namespace Projector
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_RASTERIZATION_STATE_CREATE_INFO,
                 .depthClampEnable = VK_FALSE,
                 .rasterizerDiscardEnable = VK_FALSE,
-                // .polygonMode = VK_POLYGON_MODE_LINE,
                 .polygonMode = wireFrame_ ? VK_POLYGON_MODE_LINE : VK_POLYGON_MODE_FILL,
-                .cullMode = VK_CULL_MODE_NONE,
+                .cullMode = VK_CULL_MODE_BACK_BIT,
                 .frontFace = VK_FRONT_FACE_CLOCKWISE,
                 .depthBiasEnable = VK_FALSE,
                 .depthBiasConstantFactor = 0.0f, // Optional
@@ -1439,8 +1455,8 @@ namespace Projector
         // Render depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, depthImage_, depthImageMemory_);
-            depthImageView_ = Util::CreateImageView(device_, depthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
+            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, renderDepthImage_, renderDepthImageMemory_);
+            renderDepthImageView_ = Util::CreateImageView(device_, renderDepthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
         // Shading rate map image
         {
@@ -1515,8 +1531,6 @@ namespace Projector
                 VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
                 1
             );
-
-
         }
         // Render result image
         {
@@ -1565,8 +1579,14 @@ namespace Projector
         // Warp color image
         {
             VkFormat colorFormat = swapChainImageFormat_;
-            Util::CreateImage(physicalDevice_, device_, swapChainExtent_.width, swapChainExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
+            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
             warpColorImageView_ = Util::CreateImageView(device_, warpColorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+        }
+        // Warp depth image
+        {
+            VkFormat depthFormat = FindDepthFormat();
+            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpDepthImage_, warpDepthImageMemory_);
+            warpDepthImageView_ = Util::CreateImageView(device_, warpDepthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
     }
 
@@ -1581,7 +1601,7 @@ namespace Projector
                 {
                     colorImageView_,
                     resultImageViews_[i],
-                    depthImageView_,
+                    renderDepthImageView_,
                     resultImageViewsDepth_[i],
                     shadingRateImageView_,
                 };
@@ -1607,10 +1627,11 @@ namespace Projector
             warpFramebuffers_.resize(swapChainImages_.size());
             for (size_t i = 0; i < swapChainImages_.size(); i++)
             {
-                std::array<VkImageView, 2> attachments =
+                std::array<VkImageView, 3> attachments =
                 {
                     warpColorImageView_,
                     swapChainImageViews_[i],
+                    warpDepthImageView_,
                 };
                 VkFramebufferCreateInfo framebufferInfo
                 {
@@ -2420,10 +2441,11 @@ namespace Projector
             throw std::runtime_error("failed to begin recording warp command buffer");
         }
 
-        std::array<VkClearValue, 2> clearValues
+        std::array<VkClearValue, 3> clearValues
         {
-            VkClearValue {.color = {{0.0f, 0.0f, 0.0f, 1.0f}} },
-            VkClearValue {.depthStencil = {.depth = 1.0f, .stencil = 0 } },
+            VkClearValue { .color = {{0.0f, 0.0f, 0.0f, 1.0f }} }, // Color
+            VkClearValue { },
+            VkClearValue { .depthStencil = { .depth = 1.0f, .stencil = 0 } }, // Depth
         };
 
         VkRenderPassBeginInfo renderPassInfo
@@ -2568,9 +2590,9 @@ namespace Projector
         vkDestroyImage(device_, colorImage_, nullptr);
         vkFreeMemory(device_, colorImageMemory_, nullptr);
 
-        vkDestroyImageView(device_, depthImageView_, nullptr);
-        vkDestroyImage(device_, depthImage_, nullptr);
-        vkFreeMemory(device_, depthImageMemory_, nullptr);
+        vkDestroyImageView(device_, renderDepthImageView_, nullptr);
+        vkDestroyImage(device_, renderDepthImage_, nullptr);
+        vkFreeMemory(device_, renderDepthImageMemory_, nullptr);
 
         vkDestroyImageView(device_, shadingRateImageView_, nullptr);
         vkDestroyImage(device_, shadingRateImage_, nullptr);
