@@ -77,6 +77,7 @@ namespace Projector
 		alignas(16) glm::mat4 proj;
 		alignas(16) glm::mat4 inverseProj;
 		alignas(16) glm::mat4 screen;
+		alignas(8) glm::ivec2 gridResolution;
 		alignas(4) float screenScale;
 		alignas(4) float uvScale;
 		alignas(4) float depthBlend;
@@ -299,6 +300,7 @@ namespace Projector
 		float depthBlend_ = 0.0f;
 		bool wireFrame_ = 0.0f;
 		VariableRateShadingMode variableRateShadingMode_ = VariableRateShadingMode::FourByFour;
+		glm::ivec2 gridResolution_ = glm::ivec2(64, 48);
 
 		// General projectioon variables
 		float renderFov_;

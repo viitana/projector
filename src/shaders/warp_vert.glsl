@@ -6,6 +6,7 @@ layout(set = 0, binding = 0) uniform GlobalUniformBufferObject {
     mat4 proj;
     mat4 inverseProj;
     mat4 screen;
+    ivec2 gridResolution;
     float screenScale;
     float uvScale;
     float depthBlend;
@@ -24,31 +25,27 @@ const vec2 positions[6] = vec2[](
     vec2(1, 1)
 );
 
-
-const int meshWidth = 64;
-const int meshHeight = 48;
-
 vec2 getPos(int idx) {
     int sqIdx = idx / 6;
     int vertIdx = idx % 6;
-    int sectionX = sqIdx % meshWidth;
-    int sectionY = sqIdx / meshWidth;
+    int sectionX = sqIdx % ubo.gridResolution.x;
+    int sectionY = sqIdx / ubo.gridResolution.x;
 
     return vec2(
-        (((sectionX + positions[vertIdx].x) / meshWidth)  - 0.5f) * 2.0f,
-        (((sectionY + positions[vertIdx].y) / meshHeight) - 0.5f) * 2.0f
+        (((sectionX + positions[vertIdx].x) / ubo.gridResolution.x)  - 0.5f) * 2.0f,
+        (((sectionY + positions[vertIdx].y) / ubo.gridResolution.y) - 0.5f) * 2.0f
     );
 }
 
 vec2 getUV(int idx) {
     int sqIdx = idx / 6;
     int vertIdx = idx % 6;
-    int sectionX = sqIdx % meshWidth;
-    int sectionY = sqIdx / meshWidth;
+    int sectionX = sqIdx % ubo.gridResolution.x;
+    int sectionY = sqIdx / ubo.gridResolution.x;
 
     return vec2(
-        (sectionX + positions[vertIdx].x) / meshWidth,
-        (sectionY + positions[vertIdx].y) / meshHeight
+        (sectionX + positions[vertIdx].x) / ubo.gridResolution.x,
+        (sectionY + positions[vertIdx].y) / ubo.gridResolution.y
     );
 }
 

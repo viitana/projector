@@ -187,6 +187,9 @@ namespace Projector
                         {
                             doRecreateSwapchain = true;
                         }
+                        ImGui::SliderInt("Grid resolution X", &gridResolution_.x, 1, 2048);
+                        ImGui::SameLine();
+                        ImGui::SliderInt("Y", &gridResolution_.y, 1, 2048);
                         ImGui::Indent(-12.0f);
 
                         ImGui::End();
@@ -200,14 +203,16 @@ namespace Projector
                         );
                         ImGui::SetWindowPos(ImVec2(0, 0));
 
-                        ImGui::Text("render position - x: %f y: %f z: %f", playerRender_.position.x, playerRender_.position.y, playerRender_.position.z);
-                        ImGui::Text("warp   position - x: %f y: %f z: %f", playerWarp_.position.x, playerWarp_.position.y, playerWarp_.position.z);
-
-                        ImGui::Text("render rotation - x: %f y: %f z: %f", playerRender_.rotation.x, playerRender_.rotation.y, 0);
-                        ImGui::Text("warp   rotation - x: %f y: %f z: %f", playerWarp_.rotation.x, playerWarp_.rotation.y, 0);
+                        ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Perspective transforms");
+                        ImGui::Text("Render :: Pos x: %f y: %f z: %f - Rot x: %f y: %f",
+                            playerRender_.position.x, playerRender_.position.y, playerRender_.position.z, playerRender_.rotation.x, playerRender_.rotation.y);
+                        ImGui::Text("Warp   :: Pos x: %f y: %f z: %f - Rot x: %f y: %f",
+                            playerWarp_.position.x, playerWarp_.position.y, playerWarp_.position.z, playerWarp_.rotation.x, playerWarp_.rotation.y);
 
                         ImGui::Spacing();
-                        ImGui::Text("Render timestamp resolution: %f ns", timeStampPeriod_);
+                        ImGui::Spacing();
+                        ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Timing");
+                        ImGui::Text("Device timestamp resolution: %f ns", timeStampPeriod_);
                         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
                         {
                             ImGui::Text("Frame %d render start stamp: %llu, end stamp: %llu (delta %llu)", i, stats.renderStartStamps[i], stats.renderEndStamps[i], stats.renderEndStamps[i] - stats.renderStartStamps[i]);
@@ -2160,6 +2165,7 @@ namespace Projector
             .proj = perspective,
             .inverseProj = inversePerspective,
             .screen = screen * renderRotation,
+            .gridResolution = gridResolution_,
             .screenScale = renderOvershotScreenScale_,
             .uvScale = renderOvershotScreenScale_ / renderScreenScale_,
             .depthBlend = depthBlend_,
@@ -2466,7 +2472,7 @@ namespace Projector
         };
         vkCmdSetScissor(commandBuffer, 0, 1, &scissor);
 
-        vkCmdDraw(commandBuffer, 18432, 1, 0, 0);
+        vkCmdDraw(commandBuffer, 6 * gridResolution_.x * gridResolution_.y, 1, 0, 0);
 
         ImDrawData* draw_data = ImGui::GetDrawData();
         ImGui_ImplVulkan_RenderDrawData(draw_data, commandBuffer);
