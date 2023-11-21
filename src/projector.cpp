@@ -27,6 +27,7 @@ namespace Projector
         PickPhysicalDevice();
         CreateLogicalDevice();
         CreateCommandPool();
+        CreateQueryPool();
 
         Input::InputHandler::Init(window_);
 
@@ -115,6 +116,12 @@ namespace Projector
                 bool rendering = tillRender < 0;
                 bool warping = tillWarp < 0;
 
+                FrameStats stats;
+                if (rendering || warping)
+                {
+                    stats = GetFrameStats();
+                }
+
                 if (rendering)
                 {
                     if (doRender_) DrawFrame();
@@ -198,6 +205,20 @@ namespace Projector
 
                         ImGui::Text("render rotation - x: %f y: %f z: %f", playerRender_.rotation.x, playerRender_.rotation.y, 0);
                         ImGui::Text("warp   rotation - x: %f y: %f z: %f", playerWarp_.rotation.x, playerWarp_.rotation.y, 0);
+
+                        ImGui::Spacing();
+                        ImGui::Text("Render timestamp resolution: %f ns", timeStampPeriod_);
+                        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+                        {
+                            ImGui::Text("Frame %d render start stamp: %llu, end stamp: %llu (delta %llu)", i, stats.renderStartStamps[i], stats.renderEndStamps[i], stats.renderEndStamps[i] - stats.renderStartStamps[i]);
+                        }
+                        ImGui::Spacing();
+                        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+                        {
+                            ImGui::Text("Frame %d render time (ns): %f", i, stats.renderTimes[i]);
+                        }
+                        ImGui::Text("Latest frame render time (ns): %f", stats.latestRender);
+                        ImGui::Text("Warp time (ms): %f", stats.warpTime);
 
                         ImGui::End();
                     }
@@ -613,6 +634,7 @@ namespace Projector
 
                 physicalDevice_ = device;
                 msaaSamples_ = GetMaxUsableSampleCount(device);
+                timeStampPeriod_ = deviceProperties.properties.limits.timestampPeriod;
                 // msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
                 deviceName = deviceProperties.properties.deviceName;
                 shadingRateProperties_ = shadingRateProperties;
@@ -630,7 +652,6 @@ namespace Projector
                     }
                     vkGetPhysicalDeviceFragmentShadingRatesKHR_(device, &shadingRatesCount, shadingRates_.data());
                 }
-
                 break;
             }
         }
@@ -705,6 +726,35 @@ namespace Projector
         vkGetDeviceQueue(device_, queueFamilies.graphicsFamily.value(), 0, &graphicsQueue_);
         vkGetDeviceQueue(device_, queueFamilies.graphicsFamily.value(), 1, &warpQueue_);
         vkGetDeviceQueue(device_, queueFamilies.presentFamily.value(), 0, &presentQueue_);
+    }
+
+    void Projector::CreateQueryPool()
+    {
+        VkQueryPoolCreateInfo renderQueryPoolInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queryType = VK_QUERY_TYPE_TIMESTAMP,
+            .queryCount = MAX_FRAMES_IN_FLIGHT * 2, // 2 timestamps (before & after) for each pass
+        };
+        if (vkCreateQueryPool(device_, &renderQueryPoolInfo, nullptr, &renderQueryPool_) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create create render query pool");
+        }
+
+        VkQueryPoolCreateInfo warpQueryPoolInfo =
+        {
+            .sType = VK_STRUCTURE_TYPE_QUERY_POOL_CREATE_INFO,
+            .pNext = nullptr,
+            .flags = 0,
+            .queryType = VK_QUERY_TYPE_TIMESTAMP,
+            .queryCount = 2,
+        };
+        if (vkCreateQueryPool(device_, &warpQueryPoolInfo, nullptr, &warpQueryPool_) != VK_SUCCESS)
+        {
+            throw std::runtime_error("failed to create create warp query pool");
+        }
     }
 
     void Projector::CreateSwapChain()
@@ -2135,7 +2185,7 @@ namespace Projector
         // Main render record & submit
         {
             vkResetCommandBuffer(drawCommandBuffers_[renderFrame_], 0);
-            RecordDraw(drawCommandBuffers_[renderFrame_]);
+            RecordDraw(drawCommandBuffers_[renderFrame_], renderFrame_);
 
             VkTimelineSemaphoreSubmitInfo timelineSubmitInfo
             {
@@ -2172,8 +2222,8 @@ namespace Projector
     {
         vkWaitForFences(device_, 1, &warpInFlightFence_, VK_TRUE, UINT64_MAX);
 
-        uint32_t imageIndex;
-        VkResult result = vkAcquireNextImageKHR(device_, swapChain_, UINT64_MAX, imageAvailableSemaphore_, VK_NULL_HANDLE, &imageIndex);
+        uint32_t frameIndex;
+        VkResult result = vkAcquireNextImageKHR(device_, swapChain_, UINT64_MAX, imageAvailableSemaphore_, VK_NULL_HANDLE, &frameIndex);
         if (result == VK_ERROR_OUT_OF_DATE_KHR)
         {
             std::cout << "Out-of-date swapchain on image acquire" << std::endl;
@@ -2202,7 +2252,7 @@ namespace Projector
         // Warp record & submit
         {
             vkResetCommandBuffer(warpCommandBuffer_, 0);
-            RecordWarp(warpCommandBuffer_, imageIndex);
+            RecordWarp(warpCommandBuffer_, frameIndex);
 
             VkSubmitInfo submitInfo
             {
@@ -2232,7 +2282,7 @@ namespace Projector
             .pWaitSemaphores = signalSemaphores,
             .swapchainCount = 1,
             .pSwapchains = swapChains,
-            .pImageIndices = &imageIndex,
+            .pImageIndices = &frameIndex,
         };
 
         result = vkQueuePresentKHR(presentQueue_, &presentInfo);
@@ -2258,7 +2308,7 @@ namespace Projector
         }
     }
 
-    void Projector::RecordDraw(VkCommandBuffer commandBuffer) const
+    void Projector::RecordDraw(VkCommandBuffer commandBuffer, uint32_t frameIndex) const
     {
         VkCommandBufferBeginInfo beginInfo
         {
@@ -2271,6 +2321,9 @@ namespace Projector
         {
             throw std::runtime_error("failed to begin recording command buffer");
         }
+
+        vkCmdResetQueryPool(commandBuffer, renderQueryPool_, frameIndex * 2, 2);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, renderQueryPool_, frameIndex * 2 + 0);
 
         std::array<VkClearValue, 3> clearValues
         {
@@ -2289,7 +2342,7 @@ namespace Projector
                 .offset = { 0, 0 },
                 .extent = renderExtent_,
             },
-            .clearValueCount = static_cast<uint32_t>(clearValues.size()),
+            .clearValueCount = static_cast<uint32_t>(clearValues.size()), 
             .pClearValues = clearValues.data(),
         };
 
@@ -2338,6 +2391,7 @@ namespace Projector
             1u
         );
 
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, renderQueryPool_, frameIndex * 2 + 1);
         vkCmdEndRenderPass(commandBuffer);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
@@ -2346,7 +2400,7 @@ namespace Projector
         }
     }
 
-    void Projector::RecordWarp(VkCommandBuffer commandBuffer, uint32_t imageIndex) const
+    void Projector::RecordWarp(VkCommandBuffer commandBuffer, uint32_t frameIndex) const
     {
         VkCommandBufferBeginInfo beginInfo
         {
@@ -2370,7 +2424,7 @@ namespace Projector
         {
             .sType = VK_STRUCTURE_TYPE_RENDER_PASS_BEGIN_INFO,
             .renderPass = warpRenderPass_,
-            .framebuffer = warpFramebuffers_[imageIndex],
+            .framebuffer = warpFramebuffers_[frameIndex],
             .renderArea = VkRect2D
             {
                 .offset = { 0, 0 },
@@ -2423,6 +2477,56 @@ namespace Projector
         {
             throw std::runtime_error("failed to record command buffer");
         }
+    }
+
+    const FrameStats Projector::GetFrameStats() const
+    {
+        FrameStats stats =
+        {
+            .renderStartStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
+            .renderEndStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
+            .renderTimes = std::vector<float>(MAX_FRAMES_IN_FLIGHT, 0.0f),
+            .latestRender = 0,
+            .warpTime = 0.0f,
+        };
+
+        std::vector<uint64_t> results(MAX_FRAMES_IN_FLIGHT * 2 * 2, 9);
+
+        VkResult result = vkGetQueryPoolResults(
+            device_,
+            renderQueryPool_,
+            0,
+            MAX_FRAMES_IN_FLIGHT * 2, // 2 queries/timestamps per frame (start & end)
+            results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
+            results.data(),
+            2 * sizeof(uint64_t),
+            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
+        );
+        if (result != VK_SUCCESS && result != VK_NOT_READY)
+        {
+            throw std::runtime_error(std::string("failed to get render query pool results: ") + string_VkResult(result));
+        }
+
+        for (uint64_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        {
+            uint64_t startTimeStamp = 0;
+            uint64_t endTimeStamp = 0;
+            if (results[4*i + 1] != 0)
+            {
+                startTimeStamp = results[4*i + 0];
+            }
+            if (results[4*i + 3] != 0)
+            {
+                endTimeStamp = results[4*i + 2];
+            }
+            if (startTimeStamp != 0 && endTimeStamp != 0)
+            {
+                stats.renderStartStamps[i] = startTimeStamp;
+                stats.renderEndStamps[i] = endTimeStamp;
+                stats.renderTimes[i] = (endTimeStamp - startTimeStamp) * timeStampPeriod_ * 0.000001f;
+            }
+        }
+        return stats;
     }
 
     void Projector::RecreateSwapChain()

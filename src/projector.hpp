@@ -20,6 +20,7 @@
 #include "imgui_impl_vulkan.h"
 
 #include <vulkan/vulkan.h>
+#include <vulkan/vk_enum_string_helper.h>
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
@@ -87,6 +88,15 @@ namespace Projector
 		glm::vec2 rotation;
 	};
 
+	struct FrameStats
+	{
+		std::vector<uint64_t> renderStartStamps;
+		std::vector<uint64_t> renderEndStamps;
+		std::vector<float> renderTimes;
+		uint64_t latestRender;
+		float warpTime;
+	};
+
 	enum VariableRateShadingMode
 	{
 		None = 0,
@@ -129,6 +139,7 @@ namespace Projector
 		void CreateSurface();
 		void PickPhysicalDevice();
 		void CreateLogicalDevice();
+		void CreateQueryPool();
 		void CreateSwapChain();
 		void CreateImageViews();
 		void CreateCommandPool();
@@ -148,8 +159,9 @@ namespace Projector
 		void UpdateUniformBuffer(bool render);
 		void DrawFrame();
 		void WarpPresent();
-		void RecordDraw(VkCommandBuffer commandBuffer) const;
-		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t imageIndex) const;
+		void RecordDraw(VkCommandBuffer commandBuffer, uint32_t frameIndex) const;
+		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t frameIndex) const;
+		const FrameStats GetFrameStats() const;
 
 		void RecreateSwapChain();
 		void CleanupSwapChain();
@@ -160,11 +172,16 @@ namespace Projector
 		VkInstance vk_ = VK_NULL_HANDLE;
 		VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
 		VkDevice device_ = VK_NULL_HANDLE;
+		float timeStampPeriod_;
 
 		// Queues
 		VkQueue graphicsQueue_ = VK_NULL_HANDLE;
 		VkQueue warpQueue_ = VK_NULL_HANDLE;
 		VkQueue presentQueue_ = VK_NULL_HANDLE;
+
+		// Query pools
+		VkQueryPool renderQueryPool_;
+		VkQueryPool warpQueryPool_;
 
 		// Window & surface
 		GLFWwindow* window_ = VK_NULL_HANDLE;
@@ -250,6 +267,9 @@ namespace Projector
 
 		uint64_t renderFrame_ = 0;
 		uint64_t warpFrame_ = 0;
+
+		uint64_t lastRenderedFrame_ = 0;
+		uint64_t lastWarpedFrame_ = 0;
 
 		// MSAA
 		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
