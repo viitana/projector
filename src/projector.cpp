@@ -204,6 +204,8 @@ namespace Projector
                         ImGui::SetWindowPos(ImVec2(0, 0));
 
                         ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Perspective transforms");
+                        ImGui::Spacing();
+                        ImGui::Spacing();
                         ImGui::Text("Render :: Pos x: %f y: %f z: %f - Rot x: %f y: %f",
                             playerRender_.position.x, playerRender_.position.y, playerRender_.position.z, playerRender_.rotation.x, playerRender_.rotation.y);
                         ImGui::Text("Warp   :: Pos x: %f y: %f z: %f - Rot x: %f y: %f",
@@ -212,17 +214,24 @@ namespace Projector
                         ImGui::Spacing();
                         ImGui::Spacing();
                         ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Timing");
+                        ImGui::Spacing();
+                        ImGui::Spacing();
                         ImGui::Text("Device timestamp resolution: %f ns", timeStampPeriod_);
+                        ImGui::Spacing();
+                        ImGui::Spacing();
                         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
                         {
                             ImGui::Text("Frame %d render start stamp: %llu, end stamp: %llu (delta %llu)", i, stats.renderStartStamps[i], stats.renderEndStamps[i], stats.renderEndStamps[i] - stats.renderStartStamps[i]);
                         }
+                        ImGui::Text("Warp start stamp: %llu, end stamp: %llu (delta %llu)", stats.warpStartStamp, stats.warpEndStamp, stats.warpEndStamp - stats.warpStartStamp);
+                        ImGui::Spacing();
                         ImGui::Spacing();
                         for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
                         {
-                            ImGui::Text("Frame %d render time (ns): %f", i, stats.renderTimes[i]);
+                            ImGui::Text("Frame %d render time (ms): %f", i, stats.renderTimes[i]);
                         }
-                        ImGui::Text("Latest frame render time (ns): %f", stats.latestRender);
+                        ImGui::Spacing();
+                        ImGui::Spacing();
                         ImGui::Text("Warp time (ms): %f", stats.warpTime);
 
                         ImGui::End();
@@ -2418,8 +2427,8 @@ namespace Projector
             1u
         );
 
-        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, renderQueryPool_, frameIndex * 2 + 1);
         vkCmdEndRenderPass(commandBuffer);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, renderQueryPool_, frameIndex * 2 + 1);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
@@ -2440,6 +2449,9 @@ namespace Projector
         {
             throw std::runtime_error("failed to begin recording warp command buffer");
         }
+
+        vkCmdResetQueryPool(commandBuffer, warpQueryPool_, 0, 2);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, warpQueryPool_, 0);
 
         std::array<VkClearValue, 3> clearValues
         {
@@ -2500,6 +2512,7 @@ namespace Projector
         ImGui_ImplVulkan_RenderDrawData(draw_data, commandBuffer);
 
         vkCmdEndRenderPass(commandBuffer);
+        vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, warpQueryPool_, 1);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
@@ -2514,46 +2527,85 @@ namespace Projector
             .renderStartStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
             .renderEndStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
             .renderTimes = std::vector<float>(MAX_FRAMES_IN_FLIGHT, 0.0f),
-            .latestRender = 0,
             .warpTime = 0.0f,
         };
 
-        std::vector<uint64_t> results(MAX_FRAMES_IN_FLIGHT * 2 * 2, 9);
-
-        VkResult result = vkGetQueryPoolResults(
-            device_,
-            renderQueryPool_,
-            0,
-            MAX_FRAMES_IN_FLIGHT * 2, // 2 queries/timestamps per frame (start & end)
-            results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
-            results.data(),
-            2 * sizeof(uint64_t),
-            VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
-        );
-        if (result != VK_SUCCESS && result != VK_NOT_READY)
+        // Render pass
         {
-            throw std::runtime_error(std::string("failed to get render query pool results: ") + string_VkResult(result));
+            std::vector<uint64_t> results(MAX_FRAMES_IN_FLIGHT * 2 * 2, 0);
+            VkResult result = vkGetQueryPoolResults(
+                device_,
+                renderQueryPool_,
+                0,
+                MAX_FRAMES_IN_FLIGHT * 2, // 2 queries/timestamps per frame (start & end)
+                results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
+                results.data(),
+                2 * sizeof(uint64_t),
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
+            );
+            if (result != VK_SUCCESS && result != VK_NOT_READY)
+            {
+                throw std::runtime_error(std::string("failed to get render query pool results: ") + string_VkResult(result));
+            }
+
+            for (uint64_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+            {
+                uint64_t startTimeStamp = 0;
+                uint64_t endTimeStamp = 0;
+                if (results[4*i + 1] != 0)
+                {
+                    startTimeStamp = results[4*i + 0];
+                }
+                if (results[4*i + 3] != 0)
+                {
+                    endTimeStamp = results[4*i + 2];
+                }
+                if (startTimeStamp != 0 && endTimeStamp != 0)
+                {
+                    stats.renderStartStamps[i] = startTimeStamp;
+                    stats.renderEndStamps[i] = endTimeStamp;
+                    stats.renderTimes[i] = (endTimeStamp - startTimeStamp) * timeStampPeriod_ * 0.000001f;
+                }
+            }
         }
+        
 
-        for (uint64_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+        // Warp pass
         {
+            std::vector<uint64_t> results(2 * 2, 0);
+            VkResult result = vkGetQueryPoolResults(
+                device_,
+                warpQueryPool_,
+                0,
+                2, // 2 queries/timestamps (start & end)
+                results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
+                results.data(),
+                2 * sizeof(uint64_t),
+                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
+            );
+            if (result != VK_SUCCESS && result != VK_NOT_READY)
+            {
+                throw std::runtime_error(std::string("failed to get warp query pool results: ") + string_VkResult(result));
+            }
+
             uint64_t startTimeStamp = 0;
             uint64_t endTimeStamp = 0;
-            if (results[4*i + 1] != 0)
+            if (results[1] != 0)
             {
-                startTimeStamp = results[4*i + 0];
+                startTimeStamp = results[0];
             }
-            if (results[4*i + 3] != 0)
+            if (results[3] != 0)
             {
-                endTimeStamp = results[4*i + 2];
+                endTimeStamp = results[2];
             }
             if (startTimeStamp != 0 && endTimeStamp != 0)
             {
-                stats.renderStartStamps[i] = startTimeStamp;
-                stats.renderEndStamps[i] = endTimeStamp;
-                stats.renderTimes[i] = (endTimeStamp - startTimeStamp) * timeStampPeriod_ * 0.000001f;
+                stats.warpStartStamp = startTimeStamp;
+                stats.warpEndStamp = endTimeStamp;
+                stats.warpTime = (endTimeStamp - startTimeStamp) * timeStampPeriod_ * 0.000001f;
             }
         }
+
         return stats;
     }
 

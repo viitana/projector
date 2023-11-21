@@ -94,7 +94,8 @@ namespace Projector
 		std::vector<uint64_t> renderStartStamps;
 		std::vector<uint64_t> renderEndStamps;
 		std::vector<float> renderTimes;
-		uint64_t latestRender;
+		uint64_t warpStartStamp;
+		uint64_t warpEndStamp;
 		float warpTime;
 	};
 
