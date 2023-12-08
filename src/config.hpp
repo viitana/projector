@@ -6,4 +6,4 @@
 #include "vulkan/vulkan.h"
 
 static constexpr int MAX_VFOV_DEG = 130;
-static constexpr int MAX_FRAMES_IN_FLIGHT = 2;
+static constexpr int MAX_FRAMES_IN_FLIGHT = 3;

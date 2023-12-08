@@ -2,6 +2,7 @@
 
 #include <chrono>
 #include <thread>
+#include <limits>
 
 #include <stb_image.h>
 #include <glm/gtc/quaternion.hpp>
@@ -28,6 +29,9 @@ namespace Projector
         CreateLogicalDevice();
         CreateCommandPool();
         CreateQueryPool();
+
+        renderTimer_.Init(device_, physicalDevice_, MAX_FRAMES_IN_FLIGHT, 200);
+        warpTimer_.Init(device_, physicalDevice_, 1, 200);
 
         Input::InputHandler::Init(window_);
 
@@ -120,12 +124,12 @@ namespace Projector
                 if (rendering || warping)
                 {
                     stats = GetFrameStats();
+                    renderTimer_.Update();
                 }
 
                 if (rendering)
                 {
                     if (doRender_) DrawFrame();
-
                     tillRender += 1.0f / (float)renderFramerate_;
                 }
                 if (doAsyncWarp_ && warping || (!doAsyncWarp_ && rendering))
@@ -135,7 +139,6 @@ namespace Projector
                     ImGui::NewFrame();
 
                     bool doRecreateSwapchain = false;
-
                     {
                         ImGui::Begin("Settings", nullptr,
                             ImGuiWindowFlags_NoResize |
@@ -234,8 +237,34 @@ namespace Projector
                         ImGui::Spacing();
                         ImGui::Text("Warp time (ms): %f", stats.warpTime);
 
+                        ImGui::PlotLines("Frame Times", stats.renderTimes.data(), stats.renderTimes.size());
+                        ImGui::PlotLines(
+                            "",
+                            renderTimer_.GetRenderTimes(),
+                            renderTimer_.GetRenderTimesCount(),
+                            renderTimer_.GetRenderTimesOffset(),
+                            ("Render frame time (ms), average: " + std::to_string(renderTimer_.GetRenderTimesAverage())).c_str(),
+                            0,
+                            1.5f * renderTimer_.GetRenderTimesAverage(),
+                            ImVec2(700, 100)
+                        );
+                        ImGui::PlotLines(
+                            "",
+                            warpTimer_.GetRenderTimes(),
+                            warpTimer_.GetRenderTimesCount(),
+                            warpTimer_.GetRenderTimesOffset(),
+                            ("Warp frame time (ms), average: " + std::to_string(warpTimer_.GetRenderTimesAverage())).c_str(),
+                            0,
+                            1.5f * warpTimer_.GetRenderTimesAverage(),
+                            ImVec2(700, 100)
+                        );
+
                         ImGui::End();
                     }
+
+                    
+                    ImGui::ShowDemoWindow();
+                    
 
                     // Compute setting-dependent variables
                     {
@@ -2344,7 +2373,7 @@ namespace Projector
         }
     }
 
-    void Projector::RecordDraw(VkCommandBuffer commandBuffer, uint32_t frameIndex) const
+    void Projector::RecordDraw(VkCommandBuffer commandBuffer, uint32_t frameIndex)
     {
         VkCommandBufferBeginInfo beginInfo
         {
@@ -2360,6 +2389,8 @@ namespace Projector
 
         vkCmdResetQueryPool(commandBuffer, renderQueryPool_, frameIndex * 2, 2);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, renderQueryPool_, frameIndex * 2 + 0);
+
+        renderTimer_.RecordStartTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
         std::array<VkClearValue, 3> clearValues
         {
@@ -2428,7 +2459,9 @@ namespace Projector
         );
 
         vkCmdEndRenderPass(commandBuffer);
+
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, renderQueryPool_, frameIndex * 2 + 1);
+        renderTimer_.RecordEndTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {
@@ -2436,7 +2469,7 @@ namespace Projector
         }
     }
 
-    void Projector::RecordWarp(VkCommandBuffer commandBuffer, uint32_t frameIndex) const
+    void Projector::RecordWarp(VkCommandBuffer commandBuffer, uint32_t frameIndex)
     {
         VkCommandBufferBeginInfo beginInfo
         {
@@ -2452,6 +2485,8 @@ namespace Projector
 
         vkCmdResetQueryPool(commandBuffer, warpQueryPool_, 0, 2);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT, warpQueryPool_, 0);
+
+        warpTimer_.RecordStartTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
         std::array<VkClearValue, 3> clearValues
         {
@@ -2513,6 +2548,7 @@ namespace Projector
 
         vkCmdEndRenderPass(commandBuffer);
         vkCmdWriteTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT, warpQueryPool_, 1);
+        warpTimer_.RecordEndTimestamp(commandBuffer, VK_PIPELINE_STAGE_BOTTOM_OF_PIPE_BIT);
 
         if (vkEndCommandBuffer(commandBuffer) != VK_SUCCESS)
         {

@@ -13,6 +13,7 @@ set_property(TARGET projector PROPERTY CXX_STANDARD_REQUIRED ON)
 set_property(DIRECTORY ${CMAKE_CURRENT_SOURCE_DIR} PROPERTY VS_STARTUP_PROJECT projector)
 set_property(TARGET projector PROPERTY VS_DEBUGGER_WORKING_DIRECTORY "${CMAKE_SOURCE_DIR}")
 
+
 # Included lib; stb_image (https://github.com/nothings/stb)
 add_library(stbi INTERFACE)
 target_include_directories(stbi INTERFACE lib/stb_image)

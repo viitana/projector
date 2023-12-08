@@ -1,4 +1,5 @@
 #version 450
+#pragma optimize(off)
 #pragma shader_stage(fragment)
 
 layout(set = 2, binding = 0) uniform sampler2D colorSampler;
@@ -13,4 +14,16 @@ void main()
 {
     // outColor = fragColor;
     outColor = texture(colorSampler, fragTexCoord);
+
+    // const int n = 100;
+
+    // vec4 color = vec4(0);
+    // for (int x = -n; x <= n; x++)
+    // for (int y = -n; y <= n; y++)
+    // {
+    //     color = color + texture(colorSampler, vec2(fragTexCoord.x + x, fragTexCoord.y + y));
+    // }
+    // color = color / (4 * n * n);
+
+    // outColor = color;
 }

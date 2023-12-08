@@ -34,6 +34,7 @@
 #include "config.hpp"
 #include "input.hpp"
 #include "scene.hpp"
+#include "stats.hpp"
 #include "util.hpp"
 
 namespace Projector
@@ -161,8 +162,8 @@ namespace Projector
 		void UpdateUniformBuffer(bool render);
 		void DrawFrame();
 		void WarpPresent();
-		void RecordDraw(VkCommandBuffer commandBuffer, uint32_t frameIndex) const;
-		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t frameIndex) const;
+		void RecordDraw(VkCommandBuffer commandBuffer, uint32_t frameIndex);
+		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 		const FrameStats GetFrameStats() const;
 
 		void RecreateSwapChain();
@@ -293,6 +294,10 @@ namespace Projector
 
 		// Input
 		const Input::InputHandler* input_;
+
+		// DeviceOpTimer
+		DeviceOpTimer renderTimer_;
+		DeviceOpTimer warpTimer_;
 
 		// Settings
 		bool doRender_ = true;

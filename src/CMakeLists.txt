@@ -8,6 +8,8 @@ target_sources(projector
         projector.hpp
         scene.cpp
         scene.hpp
+        stats.cpp
+        stats.hpp
         util.cpp
         util.hpp
 )
