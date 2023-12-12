@@ -9,6 +9,8 @@
 #include <glm/gtx/projection.hpp>
 #include <glm/gtx/euler_angles.hpp>
 
+#include <vulkan/vk_enum_string_helper.h>
+
 #include "scene.hpp"
 
 namespace Projector
@@ -25,20 +27,23 @@ namespace Projector
         CreateInstance();
         CreateSurface();
 
-        PickPhysicalDevice();
+        PickGPU();
         CreateLogicalDevice();
         CreateCommandPool();
         CreateQueryPool();
 
-        renderTimer_.Init(device_, physicalDevice_, MAX_FRAMES_IN_FLIGHT, 200);
-        warpTimer_.Init(device_, physicalDevice_, 1, 200);
+        renderTimer_.Init(device_, gpu_->PhysicalDevice(), MAX_FRAMES_IN_FLIGHT, 200);
+        warpTimer_.Init(device_, gpu_->PhysicalDevice(), 1, 200);
 
         Input::InputHandler::Init(window_);
 
         scene_ = new Scene::Model(
             "res/sponza/Sponza.gltf",
-            //"res/abeautifulgame/ABeautifulGame.gltf",
-            physicalDevice_,
+            // // "res/new/scenes/cube.gltf",
+            // "res/new/scenes/rock.gltf",
+            // "res/new/scenes/planet.gltf",
+            // "res/abeautifulgame/ABeautifulGame.gltf",
+            gpu_->PhysicalDevice(),
             device_,
             commandPool_,
             graphicsQueue_,
@@ -120,12 +125,12 @@ namespace Projector
                 bool rendering = tillRender < 0;
                 bool warping = tillWarp < 0;
 
-                FrameStats stats;
-                if (rendering || warping)
-                {
-                    stats = GetFrameStats();
-                    renderTimer_.Update();
-                }
+                // FrameStats stats;
+                // if (rendering || warping)
+                // {
+                //     stats = GetFrameStats();
+                //     renderTimer_.Update();
+                // }
 
                 if (rendering)
                 {
@@ -219,25 +224,25 @@ namespace Projector
                         ImGui::TextColored(ImVec4(1, 0.5, 0, 1), "Timing");
                         ImGui::Spacing();
                         ImGui::Spacing();
-                        ImGui::Text("Device timestamp resolution: %f ns", timeStampPeriod_);
+                        ImGui::Text("Device timestamp resolution: %f ns", gpu_->Properties().limits.timestampPeriod);
                         ImGui::Spacing();
                         ImGui::Spacing();
-                        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-                        {
-                            ImGui::Text("Frame %d render start stamp: %llu, end stamp: %llu (delta %llu)", i, stats.renderStartStamps[i], stats.renderEndStamps[i], stats.renderEndStamps[i] - stats.renderStartStamps[i]);
-                        }
-                        ImGui::Text("Warp start stamp: %llu, end stamp: %llu (delta %llu)", stats.warpStartStamp, stats.warpEndStamp, stats.warpEndStamp - stats.warpStartStamp);
-                        ImGui::Spacing();
-                        ImGui::Spacing();
-                        for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-                        {
-                            ImGui::Text("Frame %d render time (ms): %f", i, stats.renderTimes[i]);
-                        }
-                        ImGui::Spacing();
-                        ImGui::Spacing();
-                        ImGui::Text("Warp time (ms): %f", stats.warpTime);
+                        // for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+                        // {
+                        //     ImGui::Text("Frame %d render start stamp: %llu, end stamp: %llu (delta %llu)", i, stats.renderStartStamps[i], stats.renderEndStamps[i], stats.renderEndStamps[i] - stats.renderStartStamps[i]);
+                        // }
+                        // ImGui::Text("Warp start stamp: %llu, end stamp: %llu (delta %llu)", stats.warpStartStamp, stats.warpEndStamp, stats.warpEndStamp - stats.warpStartStamp);
+                        // ImGui::Spacing();
+                        // ImGui::Spacing();
+                        // for (int i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+                        // {
+                        //     ImGui::Text("Frame %d render time (ms): %f", i, stats.renderTimes[i]);
+                        // }
+                        // ImGui::Spacing();
+                        // ImGui::Spacing();
+                        // ImGui::Text("Warp time (ms): %f", stats.warpTime);
 
-                        ImGui::PlotLines("Frame Times", stats.renderTimes.data(), stats.renderTimes.size());
+                        // ImGui::PlotLines("Frame Times", stats.renderTimes.data(), stats.renderTimes.size());
                         ImGui::PlotLines(
                             "",
                             renderTimer_.GetRenderTimes(),
@@ -331,30 +336,6 @@ namespace Projector
         return true;
     }
 
-    const VkSurfaceFormatKHR Projector::ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const
-    {
-        for (const auto& availableFormat : availableFormats)
-        {
-            if (availableFormat.format == VK_FORMAT_B8G8R8A8_SRGB && availableFormat.colorSpace == VK_COLOR_SPACE_SRGB_NONLINEAR_KHR)
-            {
-                return availableFormat;
-            }
-        }
-        return availableFormats[0];
-    }
-
-    const VkPresentModeKHR Projector::ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const
-    {
-        for (const auto& availablePresentMode : availablePresentModes)
-        {
-            if (availablePresentMode == VK_PRESENT_MODE_MAILBOX_KHR)
-            {
-                return availablePresentMode;
-            }
-        }
-        return VK_PRESENT_MODE_FIFO_KHR;
-    }
-
     const VkExtent2D Projector::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const
     {
         if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
@@ -375,57 +356,6 @@ namespace Projector
             actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
             return actualExtent;
         }
-    }
-
-    const SwapChainSupportDetails Projector::QuerySwapChainSupport(VkPhysicalDevice device) const
-    {
-        SwapChainSupportDetails details;
-
-        vkGetPhysicalDeviceSurfaceCapabilitiesKHR(device, surface_, &details.capabilities);
-
-        uint32_t formatCount;
-        vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, nullptr);
-        if (formatCount != 0)
-        {
-            details.formats.resize(formatCount);
-            vkGetPhysicalDeviceSurfaceFormatsKHR(device, surface_, &formatCount, details.formats.data());
-        }
-
-        uint32_t presentModeCount;
-        vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, nullptr);
-        if (presentModeCount != 0)
-        {
-            details.presentModes.resize(presentModeCount);
-            vkGetPhysicalDeviceSurfacePresentModesKHR(device, surface_, &presentModeCount, details.presentModes.data());
-        }
-
-        return details;
-    }
-
-    const QueueFamilyIndices Projector::FindQueueFamilies(VkPhysicalDevice device) const
-    {
-        uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-        QueueFamilyIndices indices;
-        int i = 0;
-        for (const auto& queueFamily : queueFamilies)
-        {
-            if (queueFamily.queueFlags & VK_QUEUE_GRAPHICS_BIT)
-            {
-                indices.graphicsFamily = i;
-            }
-            VkBool32 presentSupport = false;
-            vkGetPhysicalDeviceSurfaceSupportKHR(device, i, surface_, &presentSupport);
-            if (presentSupport)
-            {
-                indices.presentFamily = i;
-            }
-            i++;
-        }
-        return indices;
     }
 
     void Projector::ListDeviceDetails(VkPhysicalDevice device) const
@@ -478,32 +408,6 @@ namespace Projector
         return requiredExtensions.empty();
     }
 
-    const bool Projector::IsDeviceSuitable(VkPhysicalDevice device) const
-    {
-        VkPhysicalDeviceProperties deviceProperties;
-        vkGetPhysicalDeviceProperties(device, &deviceProperties);
-        VkPhysicalDeviceFeatures deviceFeatures;
-        vkGetPhysicalDeviceFeatures(device, &deviceFeatures);
-
-        QueueFamilyIndices indices = FindQueueFamilies(device);
-
-        bool extensionsSupported = CheckDeviceExtensionSupport(device);
-
-        bool swapChainAdequate = false;
-        if (extensionsSupported)
-        {
-            SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(device);
-            swapChainAdequate = !swapChainSupport.formats.empty() && !swapChainSupport.presentModes.empty();
-        }
-
-        return
-            indices.IsComplete() &&
-            extensionsSupported &&
-            swapChainAdequate &&
-            deviceFeatures.samplerAnisotropy &&
-            deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
-    }
-
     const VkShaderModule Projector::CreateShaderModule(const std::vector<char>& code) const
     {
         VkShaderModuleCreateInfo createInfo
@@ -526,7 +430,7 @@ namespace Projector
         for (VkFormat format : candidates)
         {
             VkFormatProperties props;
-            vkGetPhysicalDeviceFormatProperties(physicalDevice_, format, &props);
+            vkGetPhysicalDeviceFormatProperties(gpu_->PhysicalDevice(), format, &props);
 
             if (tiling == VK_IMAGE_TILING_LINEAR && (props.linearTilingFeatures & features) == features)
             {
@@ -629,8 +533,9 @@ namespace Projector
         }
     }
 
-    void Projector::PickPhysicalDevice()
+    void Projector::PickGPU()
     {
+        // Get physical devices count
         uint32_t deviceCount = 0;
         vkEnumeratePhysicalDevices(vk_, &deviceCount, nullptr);
         if (deviceCount == 0)
@@ -638,100 +543,131 @@ namespace Projector
             throw std::runtime_error("failed to find GPUs with Vulkan support");
         }
 
-        uint32_t glfwExtensionCount = 0;
-        const char** glfwExtensions;
-        glfwExtensions = glfwGetRequiredInstanceExtensions(&glfwExtensionCount);
-        std::cout << "Required extensions: " << glfwExtensionCount << std::endl;
-        for (int i = 0; i < glfwExtensionCount; i++)
-        {
-            std::cout << "  " << glfwExtensions[i] << std::endl;
-        }
-
+        // Get physical devices
         std::vector<VkPhysicalDevice> devices(deviceCount);
         vkEnumeratePhysicalDevices(vk_, &deviceCount, devices.data());
 
-        std::string deviceName = "Unknown";
-        std::cout << "Available devices: " << deviceCount << std::endl;
-        for (const auto& device : devices)
+        // Init GPU list
+        for (const VkPhysicalDevice& device : devices)
         {
-            VkPhysicalDeviceProperties deviceProperties;
-            vkGetPhysicalDeviceProperties(device, &deviceProperties);
-            std::cout << "  " << deviceProperties.deviceName << ":" << std::endl;
-            ListDeviceDetails(device);
+            // GPU gpu(vk_, device, surface_);
+            gpus_.emplace_back(std::make_shared<GPU>(vk_, device, surface_));
         }
 
-        for (const auto& device : devices)
+        // Try picking first suitable discrete GPU
+        for (const std::shared_ptr<GPU>& gpu : gpus_)
         {
-            if (IsDeviceSuitable(device))
+            if (gpu->IsSuitable() && gpu->IsDiscrete())
             {
-                VkPhysicalDeviceFragmentShadingRatePropertiesKHR shadingRateProperties
-                {
-                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_PROPERTIES_KHR,
-                };
-                VkPhysicalDeviceProperties2 deviceProperties
-                {
-                    .sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_PROPERTIES_2,
-                    .pNext = &shadingRateProperties,
-                };
-                vkGetPhysicalDeviceProperties2(device, &deviceProperties);
-
-                physicalDevice_ = device;
-                msaaSamples_ = GetMaxUsableSampleCount(device);
-                timeStampPeriod_ = deviceProperties.properties.limits.timestampPeriod;
-                // msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
-                deviceName = deviceProperties.properties.deviceName;
-                shadingRateProperties_ = shadingRateProperties;
-
-                auto vkGetPhysicalDeviceFragmentShadingRatesKHR_ = (PFN_vkGetPhysicalDeviceFragmentShadingRatesKHR)vkGetInstanceProcAddr(vk_, "vkGetPhysicalDeviceFragmentShadingRatesKHR");
-
-                uint32_t shadingRatesCount = 0;
-                vkGetPhysicalDeviceFragmentShadingRatesKHR_(device, &shadingRatesCount, VK_NULL_HANDLE);
-                if (shadingRatesCount > 0)
-                {
-                    shadingRates_.resize(shadingRatesCount);
-                    for (VkPhysicalDeviceFragmentShadingRateKHR& fragment_shading_rate : shadingRates_)
-                    {
-                        fragment_shading_rate.sType = VK_STRUCTURE_TYPE_PHYSICAL_DEVICE_FRAGMENT_SHADING_RATE_KHR;
-                    }
-                    vkGetPhysicalDeviceFragmentShadingRatesKHR_(device, &shadingRatesCount, shadingRates_.data());
-                }
+                gpu_ = gpu;
                 break;
             }
         }
 
-        if (physicalDevice_ == VK_NULL_HANDLE)
+        // If no GPU, try picking first suitable any GPU
+        if (gpu_ == nullptr)
+        {
+            for (const std::shared_ptr<GPU>& gpu : gpus_)
+            {
+                if (gpu->IsSuitable())
+                {
+                    gpu_ = gpu;
+                    break;
+                }
+            }
+        }
+
+        if (gpu_ == nullptr)
         {
             throw std::runtime_error("failed to find a suitable GPU");
         }
-        std::cout << "Picked device \"" << deviceName << "\"" << std::endl;
+        std::cout << "Picked device \"" << gpu_->Properties().deviceName << "\"" << std::endl;
     }
 
     void Projector::CreateLogicalDevice()
     {
-        float defaultPriority = 0.0f;
-        float highPriority = 1.0f;
+        float renderPriority = 0.0f;
+        float warpPriority = 1.0f;
+        float presentPriority = 1.0f;
 
-        QueueFamilyIndices queueFamilies = FindQueueFamilies(physicalDevice_);
+        uint32_t renderQueueFamilyIndex = gpu_->RenderQueueFamilyIndex();
+        uint32_t warpQueueFamilyIndex = gpu_->WarpQueueFamilyIndex();
+        uint32_t presentQueueFamilyIndex = gpu_->PresentQueueFamilyIndex();
+        // uint32_t renderQueueIndex = gpu_->RenderQueueFamilyIndex();
+        // uint32_t warpQueueIndex = gpu_->WarpQueueFamilyIndex();
+        // uint32_t presentQueueIndex = gpu_->PresentQueueFamilyIndex();
+
+        int renderQueueIndex = -1;
+        int warpQueueIndex = -1;
+        int presentQueueIndex = -1;
+
         std::vector<VkDeviceQueueCreateInfo> queueCreateInfos;
+        std::vector<std::vector<float>> queuePriorities;
 
-        std::array<float, 2> graphicsQueuePriorities { defaultPriority, highPriority };
-        VkDeviceQueueCreateInfo graphicsQueueCreateInfo
+        // Add render queue create info
         {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = queueFamilies.graphicsFamily.value(),
-            .queueCount = 2,
-            .pQueuePriorities = graphicsQueuePriorities.data(),
-        };
-        queueCreateInfos.push_back(graphicsQueueCreateInfo);
+            queueCreateInfos.push_back(VkDeviceQueueCreateInfo
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                    .queueFamilyIndex = renderQueueFamilyIndex,
+                    .queueCount = 1,
+                }
+            );
+            queuePriorities.push_back({ renderPriority });
+            renderQueueIndex = 0;
+        }
 
-        VkDeviceQueueCreateInfo presentQueueCreateInfo
+        // Add warp queue info
+        for (int i = 0; i < queueCreateInfos.size(); i++)
         {
-            .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
-            .queueFamilyIndex = queueFamilies.presentFamily.value(),
-            .queueCount = 1,
-            .pQueuePriorities = &defaultPriority,
-        };
-        queueCreateInfos.push_back(presentQueueCreateInfo);
+            if (queueCreateInfos[i].queueFamilyIndex == warpQueueFamilyIndex)
+            {
+                queueCreateInfos[i].queueCount = std::min(queueCreateInfos[i].queueCount + 1, gpu_->WarpQueueFamily().queueCount);
+                queuePriorities[i].push_back(warpPriority);
+                warpQueueIndex = queueCreateInfos[i].queueCount - 1;
+            }
+        }
+        if (warpQueueIndex == -1)
+        {
+            queueCreateInfos.push_back(VkDeviceQueueCreateInfo
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                    .queueFamilyIndex = warpQueueFamilyIndex,
+                    .queueCount = 1,
+                }
+            );
+            queuePriorities.push_back({ warpPriority });
+            warpQueueIndex = 0;
+        }
+        
+        // Add present queue info
+        for (int i = 0; i < queueCreateInfos.size(); i++)
+        {
+            if (queueCreateInfos[i].queueFamilyIndex == presentQueueFamilyIndex)
+            {
+                queueCreateInfos[i].queueCount = std::min(queueCreateInfos[i].queueCount + 1, gpu_->PresentQueueFamily().queueCount);
+                queuePriorities[i].push_back(presentPriority);
+                presentQueueIndex = queueCreateInfos[i].queueCount - 1;
+            }
+        }
+        if (presentQueueIndex == -1)
+        {
+            queueCreateInfos.push_back(VkDeviceQueueCreateInfo
+                {
+                    .sType = VK_STRUCTURE_TYPE_DEVICE_QUEUE_CREATE_INFO,
+                    .queueFamilyIndex = presentQueueFamilyIndex,
+                    .queueCount = 1,
+                }
+            );
+            queuePriorities.push_back({ presentPriority });
+            presentQueueIndex = 0;
+        }
+
+        // Link priorities to queue create infos
+        for (int i = 0; i < queueCreateInfos.size(); i++)
+        {
+            queueCreateInfos[i].pQueuePriorities = queuePriorities[i].data();
+        }
 
         VkPhysicalDeviceFragmentShadingRateFeaturesKHR shadingRateFeatures
         {
@@ -749,6 +685,7 @@ namespace Projector
                 .samplerAnisotropy = VK_TRUE,
             }
         };
+
         VkDeviceCreateInfo createInfo
         {
             .sType = VK_STRUCTURE_TYPE_DEVICE_CREATE_INFO,
@@ -761,14 +698,16 @@ namespace Projector
             .ppEnabledExtensionNames = deviceExtensions.data(),
         };
 
-        if (vkCreateDevice(physicalDevice_, &createInfo, nullptr, &device_) != VK_SUCCESS)
+        if (vkCreateDevice(gpu_->PhysicalDevice(), &createInfo, nullptr, &device_) != VK_SUCCESS)
         {
             throw std::runtime_error("failed to create logical device");
         }
 
-        vkGetDeviceQueue(device_, queueFamilies.graphicsFamily.value(), 0, &graphicsQueue_);
-        vkGetDeviceQueue(device_, queueFamilies.graphicsFamily.value(), 1, &warpQueue_);
-        vkGetDeviceQueue(device_, queueFamilies.presentFamily.value(), 0, &presentQueue_);
+        vkGetDeviceQueue(device_, renderQueueFamilyIndex, renderQueueIndex, &graphicsQueue_);
+        vkGetDeviceQueue(device_, warpQueueFamilyIndex, warpQueueIndex, &warpQueue_);
+        vkGetDeviceQueue(device_, presentQueueFamilyIndex, presentQueueIndex, &presentQueue_);
+
+        std::cout << "hellllo" << std::endl;
     }
 
     void Projector::CreateQueryPool()
@@ -802,54 +741,68 @@ namespace Projector
 
     void Projector::CreateSwapChain()
     {
-        SwapChainSupportDetails swapChainSupport = QuerySwapChainSupport(physicalDevice_);
+        // Get window size
+        int windowWidth, windowHeight;
+        glfwGetFramebufferSize(window_, &windowWidth, &windowHeight);
 
-        VkSurfaceFormatKHR surfaceFormat = ChooseSwapSurfaceFormat(swapChainSupport.formats);
-        VkPresentModeKHR presentMode = ChooseSwapPresentMode(swapChainSupport.presentModes);
-        VkExtent2D extent = ChooseSwapExtent(swapChainSupport.capabilities);
-
-        uint32_t imageCount = swapChainSupport.capabilities.minImageCount + 1;
-        if (swapChainSupport.capabilities.maxImageCount > 0 && imageCount > swapChainSupport.capabilities.maxImageCount)
+        uint32_t imageCount = gpu_->SurfaceCapabilities().minImageCount + 1;
+        if (
+            gpu_->SurfaceCapabilities().maxImageCount > 0 &&
+            imageCount > gpu_->SurfaceCapabilities().maxImageCount
+        )
         {
-            imageCount = swapChainSupport.capabilities.maxImageCount;
+            imageCount = gpu_->SurfaceCapabilities().maxImageCount;
         }
 
-        VkSharingMode imageSharingMode;
-        uint32_t queueFamilyIndexCount;
-        uint32_t* queueFamilyIndices;
+        VkSharingMode imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
+        uint32_t* queueFamilyIndices = nullptr;
+        std::vector<uint32_t> queueFamilies = { gpu_->RenderQueueFamilyIndex() };
 
-        QueueFamilyIndices familyIndices = FindQueueFamilies(physicalDevice_);
-        uint32_t families[2] = { familyIndices.graphicsFamily.value(), familyIndices.presentFamily.value() };
-
-        if (familyIndices.graphicsFamily != familyIndices.presentFamily)
+        bool warpFamilyIncluded = false;
+        for (uint32_t queueFamilyIndex : queueFamilies)
         {
+            if (queueFamilyIndex == gpu_->WarpQueueFamilyIndex()) warpFamilyIncluded = true;
+        }
+        if (!warpFamilyIncluded)
+        {
+            queueFamilies.push_back(gpu_->WarpQueueFamilyIndex());
             imageSharingMode = VK_SHARING_MODE_CONCURRENT;
-            queueFamilyIndexCount = 2;
-            queueFamilyIndices = families;
         }
-        else
+
+        bool presentFamilyIncluded = false;
+        for (uint32_t queueFamilyIndex : queueFamilies)
         {
-            imageSharingMode = VK_SHARING_MODE_EXCLUSIVE;
-            queueFamilyIndexCount = 0;
-            queueFamilyIndices = nullptr;
+            if (queueFamilyIndex == gpu_->PresentQueueFamilyIndex()) presentFamilyIncluded = true;
         }
+        if (!warpFamilyIncluded)
+        {
+            queueFamilies.push_back(gpu_->PresentQueueFamilyIndex());
+            imageSharingMode = VK_SHARING_MODE_CONCURRENT;
+        }
+
+        if (imageSharingMode == VK_SHARING_MODE_CONCURRENT)
+        {
+            queueFamilyIndices = queueFamilies.data();
+        }
+
+        swapChainExtent_ = gpu_->GetSurfaceExtent(windowWidth, windowHeight);
 
         VkSwapchainCreateInfoKHR createInfo
         {
             .sType = VK_STRUCTURE_TYPE_SWAPCHAIN_CREATE_INFO_KHR,
             .surface = surface_,
             .minImageCount = imageCount,
-            .imageFormat = surfaceFormat.format,
-            .imageColorSpace = surfaceFormat.colorSpace,
-            .imageExtent = extent,
+            .imageFormat = gpu_->SurfraceFormat().format,
+            .imageColorSpace = gpu_->SurfraceFormat().colorSpace,
+            .imageExtent = swapChainExtent_,
             .imageArrayLayers = 1,
             .imageUsage = VK_IMAGE_USAGE_TRANSFER_DST_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT,
             .imageSharingMode = imageSharingMode,
-            .queueFamilyIndexCount = queueFamilyIndexCount,
+            .queueFamilyIndexCount = static_cast<uint32_t>(queueFamilies.size()),
             .pQueueFamilyIndices = queueFamilyIndices,
-            .preTransform = swapChainSupport.capabilities.currentTransform,
+            .preTransform = gpu_->SurfaceCapabilities().currentTransform,
             .compositeAlpha = VK_COMPOSITE_ALPHA_OPAQUE_BIT_KHR,
-            .presentMode = presentMode,
+            .presentMode = gpu_->PresentMode(),
             .clipped = VK_TRUE,
             .oldSwapchain = VK_NULL_HANDLE,
         };
@@ -863,8 +816,6 @@ namespace Projector
         swapChainImages_.resize(imageCount);
         vkGetSwapchainImagesKHR(device_, swapChain_, &imageCount, swapChainImages_.data());
 
-        swapChainImageFormat_ = surfaceFormat.format;
-        swapChainExtent_ = extent;
         renderExtent_ = VkExtent2D
         {
             .width = static_cast<uint32_t>(swapChainExtent_.width * renderScale_),
@@ -877,7 +828,7 @@ namespace Projector
         swapChainImageViews_.resize(swapChainImages_.size());
         for (uint32_t i = 0; i < swapChainImages_.size(); i++)
         {
-            swapChainImageViews_[i] = Util::CreateImageView(device_, swapChainImages_[i], swapChainImageFormat_, VK_IMAGE_ASPECT_COLOR_BIT, 1);
+            swapChainImageViews_[i] = Util::CreateImageView(device_, swapChainImages_[i], gpu_->SurfraceFormat().format, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
     }
 
@@ -888,10 +839,12 @@ namespace Projector
             VkAttachmentDescription2 colorAttachment
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
-                .format = swapChainImageFormat_,
-                .samples = msaaSamples_,
+                .format = gpu_->SurfraceFormat().format,
+                .samples = gpu_->MaxSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .finalLayout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
@@ -905,7 +858,7 @@ namespace Projector
             VkAttachmentDescription2 colorAttachmentResolve
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
-                .format = swapChainImageFormat_,
+                .format = gpu_->SurfraceFormat().format,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -921,11 +874,15 @@ namespace Projector
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
 
+            std::cout << "color format: " << gpu_->SurfraceFormat().format << std::endl;
+            std::cout << "depth format: " << FindDepthFormat() << std::endl;
+            std::cout << "sample count: " << gpu_->MaxSampleCount() << std::endl;
+
             VkAttachmentDescription2 depthAttachment
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
                 .format = FindDepthFormat(),
-                .samples = msaaSamples_,
+                .samples = gpu_->MaxSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -949,7 +906,7 @@ namespace Projector
                 .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
                 .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, //VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             };
@@ -964,7 +921,7 @@ namespace Projector
                 .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE,
                 .pNext = nullptr,
                 .depthResolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
-                .stencilResolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
+                .stencilResolveMode = VK_RESOLVE_MODE_NONE,
                 .pDepthStencilResolveAttachment = &depthAttachmentResolveRef,
             };
 
@@ -992,7 +949,7 @@ namespace Projector
                 .sType = VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR,
                 .pNext = &depthStencilResolveInfo,
                 .pFragmentShadingRateAttachment = &shadingRateAttachmentRef,
-                .shadingRateAttachmentTexelSize = shadingRateProperties_.maxFragmentShadingRateAttachmentTexelSize,
+                .shadingRateAttachmentTexelSize = gpu_->FramentShadingRateProperties().maxFragmentShadingRateAttachmentTexelSize,
             };
 
             VkSubpassDescription2 subpass
@@ -1013,7 +970,7 @@ namespace Projector
                 .dstSubpass = 0,
                 .srcStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
                 .dstStageMask = VK_PIPELINE_STAGE_COLOR_ATTACHMENT_OUTPUT_BIT | VK_PIPELINE_STAGE_EARLY_FRAGMENT_TESTS_BIT,
-                .srcAccessMask = 0,
+                .srcAccessMask = VK_PIPELINE_STAGE_NONE,
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             };
 
@@ -1039,8 +996,8 @@ namespace Projector
         {
             VkAttachmentDescription colorAttachment
             {
-                .format = swapChainImageFormat_,
-                .samples = msaaSamples_,
+                .format = gpu_->SurfraceFormat().format,
+                .samples = gpu_->MaxSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -1056,7 +1013,7 @@ namespace Projector
 
             VkAttachmentDescription colorAttachmentResolve
             {
-                .format = swapChainImageFormat_,
+                .format = gpu_->SurfraceFormat().format,
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
@@ -1073,7 +1030,7 @@ namespace Projector
             VkAttachmentDescription depthAttachment =
             {
                 .format = FindDepthFormat(),
-                .samples = msaaSamples_,
+                .samples = gpu_->MaxSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -1190,7 +1147,7 @@ namespace Projector
             VkPipelineMultisampleStateCreateInfo multisampling
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                .rasterizationSamples = msaaSamples_,
+                .rasterizationSamples = gpu_->MaxSampleCount(),
                 .sampleShadingEnable = VK_FALSE,
                 .minSampleShading = 1.0f, // Optional
                 .pSampleMask = nullptr, // Optional
@@ -1358,7 +1315,7 @@ namespace Projector
             VkPipelineMultisampleStateCreateInfo multisampling
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                .rasterizationSamples = msaaSamples_,
+                .rasterizationSamples = gpu_->MaxSampleCount(),
                 .sampleShadingEnable = VK_FALSE,
                 .minSampleShading = 1.0f, // Optional
                 .pSampleMask = nullptr, // Optional
@@ -1467,13 +1424,11 @@ namespace Projector
 
     void Projector::CreateCommandPool()
     {
-        QueueFamilyIndices queueFamilyIndices = FindQueueFamilies(physicalDevice_);
-
         VkCommandPoolCreateInfo poolInfo
         {
             .sType = VK_STRUCTURE_TYPE_COMMAND_POOL_CREATE_INFO,
             .flags = VK_COMMAND_POOL_CREATE_RESET_COMMAND_BUFFER_BIT,
-            .queueFamilyIndex = queueFamilyIndices.graphicsFamily.value(),
+            .queueFamilyIndex = gpu_->RenderQueueFamilyIndex(),
         };
 
         if (vkCreateCommandPool(device_, &poolInfo, nullptr, &commandPool_) != VK_SUCCESS)
@@ -1486,22 +1441,22 @@ namespace Projector
     {
         // Render color image
         {
-            VkFormat colorFormat = swapChainImageFormat_;
-            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
+            VkFormat colorFormat = gpu_->SurfraceFormat().format;
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
             colorImageView_ = Util::CreateImageView(device_, colorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
         // Render depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, renderDepthImage_, renderDepthImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, renderDepthImage_, renderDepthImageMemory_);
             renderDepthImageView_ = Util::CreateImageView(device_, renderDepthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
         // Shading rate map image
         {
             VkFormat rateFormat = VK_FORMAT_R8_UINT;
-            uint32_t width = static_cast<uint32_t>(ceil(renderExtent_.width / (float)shadingRateProperties_.maxFragmentShadingRateAttachmentTexelSize.width));
-            uint32_t height = static_cast<uint32_t>(ceil(renderExtent_.height / (float)shadingRateProperties_.maxFragmentShadingRateAttachmentTexelSize.height));
-            Util::CreateImage(physicalDevice_, device_, width, height, 1, VK_SAMPLE_COUNT_1_BIT, rateFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadingRateImage_, shadingRateImageMemory_);
+            uint32_t width = static_cast<uint32_t>(ceil(renderExtent_.width / (float)gpu_->FramentShadingRateProperties().maxFragmentShadingRateAttachmentTexelSize.width));
+            uint32_t height = static_cast<uint32_t>(ceil(renderExtent_.height / (float)gpu_->FramentShadingRateProperties().maxFragmentShadingRateAttachmentTexelSize.height));
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, width, height, 1, VK_SAMPLE_COUNT_1_BIT, rateFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_FRAGMENT_SHADING_RATE_ATTACHMENT_BIT_KHR | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, shadingRateImage_, shadingRateImageMemory_);
             shadingRateImageView_ = Util::CreateImageView(device_, shadingRateImage_, rateFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         
             VkDeviceSize imageSize = width * height * sizeof(uint8_t);
@@ -1546,7 +1501,7 @@ namespace Projector
 
             VkBuffer stagingBuffer;
             VkDeviceMemory stagingBufferMemory;
-            Util::CreateBuffer(physicalDevice_, device_, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
+            Util::CreateBuffer(gpu_->PhysicalDevice(), device_, imageSize, VK_BUFFER_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, stagingBuffer, stagingBufferMemory);
 
             uint8_t* data;
             vkMapMemory(device_, stagingBufferMemory, 0, imageSize, 0, (void**)&data);
@@ -1577,19 +1532,19 @@ namespace Projector
             resultImageViews_.resize(MAX_FRAMES_IN_FLIGHT);
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
-                VkFormat colorFormat = swapChainImageFormat_;
-                Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImages_[i], resultImagesMemory_[i]);
+                VkFormat colorFormat = gpu_->SurfraceFormat().format;
+                Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImages_[i], resultImagesMemory_[i]);
                 resultImageViews_[i] = Util::CreateImageView(device_, resultImages_[i], colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
-                Util::TransitionImageLayout(
-                    device_,
-                    commandPool_,
-                    graphicsQueue_,
-                    resultImages_[i],
-                    swapChainImageFormat_,
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    1
-                );
+                // Util::TransitionImageLayout(
+                //     device_,
+                //     commandPool_,
+                //     graphicsQueue_,
+                //     resultImages_[i],
+                //     gpu_->SurfraceFormat().format,
+                //     VK_IMAGE_LAYOUT_UNDEFINED,
+                //     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                //     1
+                // );
             }
         }
         // Render depth result image
@@ -1600,30 +1555,30 @@ namespace Projector
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
                 VkFormat depthFormat = FindDepthFormat();
-                Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImagesDepth_[i], resultImagesMemoryDepth_[i]);
+                Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImagesDepth_[i], resultImagesMemoryDepth_[i]);
                 resultImageViewsDepth_[i] = Util::CreateImageView(device_, resultImagesDepth_[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
-                Util::TransitionImageLayout(
-                    device_,
-                    commandPool_,
-                    graphicsQueue_,
-                    resultImages_[i],
-                    FindDepthFormat(),
-                    VK_IMAGE_LAYOUT_UNDEFINED,
-                    VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-                    1
-                );
+                // Util::TransitionImageLayout(
+                //     device_,
+                //     commandPool_,
+                //     graphicsQueue_,
+                //     resultImagesDepth_[i],
+                //     depthFormat,
+                //     VK_IMAGE_LAYOUT_UNDEFINED,
+                //     VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+                //     1
+                // );
             }
         }
         // Warp color image
         {
-            VkFormat colorFormat = swapChainImageFormat_;
-            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
+            VkFormat colorFormat = gpu_->SurfraceFormat().format;
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
             warpColorImageView_ = Util::CreateImageView(device_, warpColorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
         // Warp depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(physicalDevice_, device_, renderExtent_.width, renderExtent_.height, 1, msaaSamples_, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpDepthImage_, warpDepthImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpDepthImage_, warpDepthImageMemory_);
             warpDepthImageView_ = Util::CreateImageView(device_, warpDepthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
     }
@@ -1701,7 +1656,7 @@ namespace Projector
 
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
-                Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers_[i], uniformBuffersMemory_[i]);
+                Util::CreateBuffer(gpu_->PhysicalDevice(), device_, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, uniformBuffers_[i], uniformBuffersMemory_[i]);
                 vkMapMemory(device_, uniformBuffersMemory_[i], 0, bufferSize, 0, &uniformBuffersMapped_[i]);
             }
         }
@@ -1709,7 +1664,7 @@ namespace Projector
         {
             VkDeviceSize bufferSize = sizeof(WarpUniformBufferObject);
 
-            Util::CreateBuffer(physicalDevice_, device_, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, warpUniformBuffer_, warpUniformBufferMemory_);
+            Util::CreateBuffer(gpu_->PhysicalDevice(), device_, bufferSize, VK_BUFFER_USAGE_UNIFORM_BUFFER_BIT, VK_MEMORY_PROPERTY_HOST_VISIBLE_BIT | VK_MEMORY_PROPERTY_HOST_COHERENT_BIT, warpUniformBuffer_, warpUniformBufferMemory_);
             vkMapMemory(device_, warpUniformBufferMemory_, 0, bufferSize, 0, &warpUniformBufferMapped_);
         }
     }
@@ -1717,7 +1672,7 @@ namespace Projector
     void Projector::CreateWarpSampler()
     {
         VkPhysicalDeviceProperties properties{};
-        vkGetPhysicalDeviceProperties(physicalDevice_, &properties);
+        vkGetPhysicalDeviceProperties(gpu_->PhysicalDevice(), &properties);
 
         VkSamplerCreateInfo samplerInfo
         {
@@ -1858,19 +1813,19 @@ namespace Projector
             VkDescriptorPoolSize // For regular & warp pass
             {
                 .type = VK_DESCRIPTOR_TYPE_UNIFORM_BUFFER,
-                .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+                .descriptorCount = 20 * static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
             },
             VkDescriptorPoolSize// For warp pass
             {
                 .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER,
-                .descriptorCount = static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+                .descriptorCount = 20 * static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
             },
         };
 
         VkDescriptorPoolCreateInfo poolInfo
         {
             .sType = VK_STRUCTURE_TYPE_DESCRIPTOR_POOL_CREATE_INFO,
-            .maxSets = 2 * static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
+            .maxSets = 20 * static_cast<uint32_t>(MAX_FRAMES_IN_FLIGHT),
             .poolSizeCount = static_cast<uint32_t>(poolSizes.size()),
             .pPoolSizes = poolSizes.data(),
         };
@@ -1898,7 +1853,7 @@ namespace Projector
             descriptorSets_.resize(MAX_FRAMES_IN_FLIGHT);
             if (vkAllocateDescriptorSets(device_, &allocInfo, descriptorSets_.data()) != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to allocate descriptor sets");
+                throw std::runtime_error("failed to allocate descriptor sets: " );
             }
 
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -1942,7 +1897,7 @@ namespace Projector
             const VkResult result = vkAllocateDescriptorSets(device_, &allocInfo, warpDescriptorSets_.data());
             if (result != VK_SUCCESS)
             {
-                throw std::runtime_error("failed to allocate warp descriptor sets");
+                throw std::runtime_error(std::string("failed to allocate warp descriptor sets: ") + string_VkResult(result));
             }
 
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -2132,13 +2087,13 @@ namespace Projector
         ImGui_ImplVulkan_InitInfo init_info =
         {
             .Instance = vk_,
-            .PhysicalDevice = physicalDevice_,
+            .PhysicalDevice = gpu_->PhysicalDevice(),
             .Device = device_,
             .Queue = graphicsQueue_,
             .DescriptorPool = imguiPool_,
             .MinImageCount = 3,
             .ImageCount = 3,
-            .MSAASamples = msaaSamples_,
+            .MSAASamples = gpu_->MaxSampleCount(),
         };
         ImGui_ImplVulkan_Init(&init_info, warpRenderPass_);
 
@@ -2556,94 +2511,94 @@ namespace Projector
         }
     }
 
-    const FrameStats Projector::GetFrameStats() const
-    {
-        FrameStats stats =
-        {
-            .renderStartStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
-            .renderEndStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
-            .renderTimes = std::vector<float>(MAX_FRAMES_IN_FLIGHT, 0.0f),
-            .warpTime = 0.0f,
-        };
+    // const FrameStats Projector::GetFrameStats() const
+    // {
+    //     FrameStats stats =
+    //     {
+    //         .renderStartStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
+    //         .renderEndStamps = std::vector<uint64_t>(MAX_FRAMES_IN_FLIGHT, 0),
+    //         .renderTimes = std::vector<float>(MAX_FRAMES_IN_FLIGHT, 0.0f),
+    //         .warpTime = 0.0f,
+    //     };
 
-        // Render pass
-        {
-            std::vector<uint64_t> results(MAX_FRAMES_IN_FLIGHT * 2 * 2, 0);
-            VkResult result = vkGetQueryPoolResults(
-                device_,
-                renderQueryPool_,
-                0,
-                MAX_FRAMES_IN_FLIGHT * 2, // 2 queries/timestamps per frame (start & end)
-                results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
-                results.data(),
-                2 * sizeof(uint64_t),
-                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
-            );
-            if (result != VK_SUCCESS && result != VK_NOT_READY)
-            {
-                throw std::runtime_error(std::string("failed to get render query pool results: ") + string_VkResult(result));
-            }
+    //     // Render pass
+    //     {
+    //         std::vector<uint64_t> results(MAX_FRAMES_IN_FLIGHT * 2 * 2, 0);
+    //         VkResult result = vkGetQueryPoolResults(
+    //             device_,
+    //             renderQueryPool_,
+    //             0,
+    //             MAX_FRAMES_IN_FLIGHT * 2, // 2 queries/timestamps per frame (start & end)
+    //             results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
+    //             results.data(),
+    //             2 * sizeof(uint64_t),
+    //             VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
+    //         );
+    //         if (result != VK_SUCCESS && result != VK_NOT_READY)
+    //         {
+    //             throw std::runtime_error(std::string("failed to get render query pool results: ") + string_VkResult(result));
+    //         }
 
-            for (uint64_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
-            {
-                uint64_t startTimeStamp = 0;
-                uint64_t endTimeStamp = 0;
-                if (results[4*i + 1] != 0)
-                {
-                    startTimeStamp = results[4*i + 0];
-                }
-                if (results[4*i + 3] != 0)
-                {
-                    endTimeStamp = results[4*i + 2];
-                }
-                if (startTimeStamp != 0 && endTimeStamp != 0)
-                {
-                    stats.renderStartStamps[i] = startTimeStamp;
-                    stats.renderEndStamps[i] = endTimeStamp;
-                    stats.renderTimes[i] = (endTimeStamp - startTimeStamp) * timeStampPeriod_ * 0.000001f;
-                }
-            }
-        }
+    //         for (uint64_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
+    //         {
+    //             uint64_t startTimeStamp = 0;
+    //             uint64_t endTimeStamp = 0;
+    //             if (results[4*i + 1] != 0)
+    //             {
+    //                 startTimeStamp = results[4*i + 0];
+    //             }
+    //             if (results[4*i + 3] != 0)
+    //             {
+    //                 endTimeStamp = results[4*i + 2];
+    //             }
+    //             if (startTimeStamp != 0 && endTimeStamp != 0)
+    //             {
+    //                 stats.renderStartStamps[i] = startTimeStamp;
+    //                 stats.renderEndStamps[i] = endTimeStamp;
+    //                 stats.renderTimes[i] = (endTimeStamp - startTimeStamp) * gpu_->Properties().limits.timestampPeriod * 0.000001f;
+    //             }
+    //         }
+    //     }
         
 
-        // Warp pass
-        {
-            std::vector<uint64_t> results(2 * 2, 0);
-            VkResult result = vkGetQueryPoolResults(
-                device_,
-                warpQueryPool_,
-                0,
-                2, // 2 queries/timestamps (start & end)
-                results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
-                results.data(),
-                2 * sizeof(uint64_t),
-                VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
-            );
-            if (result != VK_SUCCESS && result != VK_NOT_READY)
-            {
-                throw std::runtime_error(std::string("failed to get warp query pool results: ") + string_VkResult(result));
-            }
+    //     // Warp pass
+    //     {
+    //         std::vector<uint64_t> results(2 * 2, 0);
+    //         VkResult result = vkGetQueryPoolResults(
+    //             device_,
+    //             warpQueryPool_,
+    //             0,
+    //             2, // 2 queries/timestamps (start & end)
+    //             results.size() * sizeof(uint64_t), // 2 uint64_t entries per query/timestamp (result & availability value)
+    //             results.data(),
+    //             2 * sizeof(uint64_t),
+    //             VK_QUERY_RESULT_64_BIT | VK_QUERY_RESULT_WITH_AVAILABILITY_BIT
+    //         );
+    //         if (result != VK_SUCCESS && result != VK_NOT_READY)
+    //         {
+    //             throw std::runtime_error(std::string("failed to get warp query pool results: ") + string_VkResult(result));
+    //         }
 
-            uint64_t startTimeStamp = 0;
-            uint64_t endTimeStamp = 0;
-            if (results[1] != 0)
-            {
-                startTimeStamp = results[0];
-            }
-            if (results[3] != 0)
-            {
-                endTimeStamp = results[2];
-            }
-            if (startTimeStamp != 0 && endTimeStamp != 0)
-            {
-                stats.warpStartStamp = startTimeStamp;
-                stats.warpEndStamp = endTimeStamp;
-                stats.warpTime = (endTimeStamp - startTimeStamp) * timeStampPeriod_ * 0.000001f;
-            }
-        }
+    //         uint64_t startTimeStamp = 0;
+    //         uint64_t endTimeStamp = 0;
+    //         if (results[1] != 0)
+    //         {
+    //             startTimeStamp = results[0];
+    //         }
+    //         if (results[3] != 0)
+    //         {
+    //             endTimeStamp = results[2];
+    //         }
+    //         if (startTimeStamp != 0 && endTimeStamp != 0)
+    //         {
+    //             stats.warpStartStamp = startTimeStamp;
+    //             stats.warpEndStamp = endTimeStamp;
+    //             stats.warpTime = (endTimeStamp - startTimeStamp) * gpu_->Properties().limits.timestampPeriod * 0.000001f;
+    //         }
+    //     }
 
-        return stats;
-    }
+    //     return stats;
+    // }
 
     void Projector::RecreateSwapChain()
     {
@@ -2725,12 +2680,5 @@ namespace Projector
     {
         auto app = reinterpret_cast<Projector*>(glfwGetWindowUserPointer(window));
         app->Resized();
-    }
-
-    const bool QueueFamilyIndices::IsComplete() const
-    {
-        return
-            graphicsFamily.has_value() &&
-            presentFamily.has_value();
     }
 }

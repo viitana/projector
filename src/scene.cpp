@@ -330,7 +330,7 @@ namespace Scene
             .pSetLayouts = layouts.data(),
         };
 
-        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);    
+        descriptorSets.resize(MAX_FRAMES_IN_FLIGHT);
         VK_CHECK_RESULT(vkAllocateDescriptorSets(device, &allocInfo, descriptorSets.data()));
 
         for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
@@ -978,16 +978,16 @@ namespace Scene
         /*getSceneDimensions();*/
 
         // Setup descriptors
-        uint32_t uboCount{ 0 };
-        uint32_t imageCount{ 0 };
-        for (auto node : linearNodes)
+        uint32_t uboCount = 0;
+        uint32_t imageCount = 0;
+        for (auto& node : linearNodes)
         {
             if (node->mesh)
             {
                 uboCount++;
             }
         }
-        for (auto material : materials)
+        for (auto& material : materials)
         {
             if (material.baseColorTexture != nullptr)
             {
@@ -1002,11 +1002,11 @@ namespace Scene
         {
             //if (descriptorBindingFlags & DescriptorBindingFlags::ImageBaseColor)
             {
-                poolSizes.push_back({ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = imageCount });
+                poolSizes.push_back({ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_FRAMES_IN_FLIGHT * imageCount });
             }
             //if (descriptorBindingFlags & DescriptorBindingFlags::ImageNormalMap)
             {
-                poolSizes.push_back({ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = imageCount });
+                poolSizes.push_back({ .type = VK_DESCRIPTOR_TYPE_COMBINED_IMAGE_SAMPLER, .descriptorCount = MAX_FRAMES_IN_FLIGHT * imageCount });
             }
         }
 
@@ -1130,16 +1130,19 @@ namespace Scene
                 {
                     //if (renderFlags & RenderFlags::BindImages)
                     {
-                        vkCmdBindDescriptorSets(
-                            commandBuffer,
-                            VK_PIPELINE_BIND_POINT_GRAPHICS,
-                            pipelineLayout,
-                            2,
-                            1,
-                            &material.descriptorSets[0],
-                            0,
-                            nullptr
-                        );
+                        if (!material.descriptorSets.empty())
+                        {
+                            vkCmdBindDescriptorSets(
+                                commandBuffer,
+                                VK_PIPELINE_BIND_POINT_GRAPHICS,
+                                pipelineLayout,
+                                2,
+                                1,
+                                &material.descriptorSets[0],
+                                0,
+                                nullptr
+                            );
+                        }
                     }
                     vkCmdDrawIndexed(commandBuffer, primitive->indexCount, 1, primitive->firstIndex, 0, 0);
                 }

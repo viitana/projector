@@ -20,7 +20,6 @@
 #include "imgui_impl_vulkan.h"
 
 #include <vulkan/vulkan.h>
-#include <vulkan/vk_enum_string_helper.h>
 #include <GLFW/glfw3.h>
 
 #define GLM_FORCE_RADIANS
@@ -32,6 +31,7 @@
 #include <glm/gtx/hash.hpp>
 
 #include "config.hpp"
+#include "gpu.hpp"
 #include "input.hpp"
 #include "scene.hpp"
 #include "stats.hpp"
@@ -49,21 +49,7 @@ namespace Projector
 	{
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME, // VK_KHR_swapchain
 		VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, // VK_KHR_fragment_shading_rate
-	};
-
-	struct QueueFamilyIndices
-	{
-		std::optional<uint32_t> graphicsFamily;
-		std::optional<uint32_t> presentFamily;
-
-		const bool IsComplete() const;
-	};
-
-	struct SwapChainSupportDetails
-	{
-		VkSurfaceCapabilitiesKHR capabilities;
-		std::vector<VkSurfaceFormatKHR> formats;
-		std::vector<VkPresentModeKHR> presentModes;
+		VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // VK_KHR_depth_stencil_resolve
 	};
 
 	struct UniformBufferObject
@@ -124,14 +110,9 @@ namespace Projector
 		void Resized();
 	private:
 		const bool CheckValidationLayerSupport() const;
-		const VkSurfaceFormatKHR ChooseSwapSurfaceFormat(const std::vector<VkSurfaceFormatKHR>& availableFormats) const;
-		const VkPresentModeKHR ChooseSwapPresentMode(const std::vector<VkPresentModeKHR>& availablePresentModes) const;
 		const VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const;
-		const SwapChainSupportDetails QuerySwapChainSupport(VkPhysicalDevice device) const;
-		const QueueFamilyIndices FindQueueFamilies(VkPhysicalDevice device) const;
 		void ListDeviceDetails(VkPhysicalDevice device) const;
 		const bool CheckDeviceExtensionSupport(VkPhysicalDevice device) const;
-		const bool IsDeviceSuitable(VkPhysicalDevice device) const;
 		const VkShaderModule CreateShaderModule(const std::vector<char>& code) const;
 		const VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) const;
 		const VkFormat FindDepthFormat() const;
@@ -140,7 +121,7 @@ namespace Projector
 
 		void CreateInstance();
 		void CreateSurface();
-		void PickPhysicalDevice();
+		void PickGPU();
 		void CreateLogicalDevice();
 		void CreateQueryPool();
 		void CreateSwapChain();
@@ -164,7 +145,7 @@ namespace Projector
 		void WarpPresent();
 		void RecordDraw(VkCommandBuffer commandBuffer, uint32_t frameIndex);
 		void RecordWarp(VkCommandBuffer commandBuffer, uint32_t frameIndex);
-		const FrameStats GetFrameStats() const;
+		// const FrameStats GetFrameStats() const;
 
 		void RecreateSwapChain();
 		void CleanupSwapChain();
@@ -173,9 +154,11 @@ namespace Projector
 
 		// Instance & device
 		VkInstance vk_ = VK_NULL_HANDLE;
-		VkPhysicalDevice physicalDevice_ = VK_NULL_HANDLE;
+
+		// GPU / device
+		std::vector<std::shared_ptr<GPU>> gpus_;
+		std::shared_ptr<GPU> gpu_ = nullptr;
 		VkDevice device_ = VK_NULL_HANDLE;
-		float timeStampPeriod_;
 
 		// Queues
 		VkQueue graphicsQueue_ = VK_NULL_HANDLE;
@@ -194,7 +177,6 @@ namespace Projector
 		VkSwapchainKHR swapChain_ = VK_NULL_HANDLE;
 		std::vector<VkImage> swapChainImages_;
 		std::vector<VkImageView> swapChainImageViews_;
-		VkFormat swapChainImageFormat_;
 		VkExtent2D swapChainExtent_;
 		std::vector<VkFramebuffer> mainFramebuffers_;
 		std::vector<VkFramebuffer> warpFramebuffers_;
@@ -278,13 +260,6 @@ namespace Projector
 
 		uint64_t lastRenderedFrame_ = 0;
 		uint64_t lastWarpedFrame_ = 0;
-
-		// MSAA
-		VkSampleCountFlagBits msaaSamples_ = VK_SAMPLE_COUNT_1_BIT;
-
-		// Shading rate properties
-		VkPhysicalDeviceFragmentShadingRatePropertiesKHR shadingRateProperties_;
-		std::vector<VkPhysicalDeviceFragmentShadingRateKHR> shadingRates_;
 
 		// Misc
 		uint16_t objectIndex_ = 0;
