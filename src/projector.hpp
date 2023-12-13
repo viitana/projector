@@ -48,7 +48,7 @@ namespace Projector
 	const std::vector<const char*> deviceExtensions =
 	{
 		VK_KHR_SWAPCHAIN_EXTENSION_NAME, // VK_KHR_swapchain
-		VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, // VK_KHR_fragment_shading_rate
+		// VK_KHR_FRAGMENT_SHADING_RATE_EXTENSION_NAME, // VK_KHR_fragment_shading_rate
 		VK_KHR_DEPTH_STENCIL_RESOLVE_EXTENSION_NAME, // VK_KHR_depth_stencil_resolve
 	};
 
