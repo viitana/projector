@@ -17,7 +17,7 @@ namespace Projector
 {
     Projector::Projector()
     {
-        assert(MAX_FRAMES_IN_FLIGHT > 1);
+        // assert(MAX_FRAMES_IN_FLIGHT > 1);
 
         if (!glfwInit())
         {
@@ -124,13 +124,6 @@ namespace Projector
 
                 bool rendering = tillRender < 0;
                 bool warping = tillWarp < 0;
-
-                // FrameStats stats;
-                // if (rendering || warping)
-                // {
-                //     stats = GetFrameStats();
-                //     renderTimer_.Update();
-                // }
 
                 if (rendering)
                 {
@@ -336,78 +329,6 @@ namespace Projector
         return true;
     }
 
-    const VkExtent2D Projector::ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const
-    {
-        if (capabilities.currentExtent.width != std::numeric_limits<uint32_t>::max())
-        {
-            return capabilities.currentExtent;
-        }
-        else
-        {
-            int width, height;
-            glfwGetFramebufferSize(window_, &width, &height);
-
-            VkExtent2D actualExtent =
-            {
-                static_cast<uint32_t>(width),
-                static_cast<uint32_t>(height)
-            };
-            actualExtent.width = std::clamp(actualExtent.width, capabilities.minImageExtent.width, capabilities.maxImageExtent.width);
-            actualExtent.height = std::clamp(actualExtent.height, capabilities.minImageExtent.height, capabilities.maxImageExtent.height);
-            return actualExtent;
-        }
-    }
-
-    void Projector::ListDeviceDetails(VkPhysicalDevice device) const
-    {
-        uint32_t queueFamilyCount = 0;
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, nullptr);
-        std::vector<VkQueueFamilyProperties> queueFamilies(queueFamilyCount);
-        vkGetPhysicalDeviceQueueFamilyProperties(device, &queueFamilyCount, queueFamilies.data());
-
-        std::cout << "    Max MSAA sample count:  " << GetMaxUsableSampleCount(device) << std::endl;
-
-        std::cout << "    Queues:" << std::endl;
-        for (auto& q_family : queueFamilies)
-        {
-            std::cout << "    - Count: " << q_family.queueCount << std::endl;
-            std::cout << "      Flags:" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_GRAPHICS_BIT) std::cout << "        VK_QUEUE_GRAPHICS_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_COMPUTE_BIT) std::cout << "        VK_QUEUE_COMPUTE_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_TRANSFER_BIT) std::cout << "        VK_QUEUE_TRANSFER_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_SPARSE_BINDING_BIT) std::cout << "        VK_QUEUE_SPARSE_BINDING_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_PROTECTED_BIT) std::cout << "        VK_QUEUE_PROTECTED_BIT" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_OPTICAL_FLOW_BIT_NV) std::cout << "        VK_QUEUE_OPTICAL_FLOW_BIT_NV" << std::endl;
-            if (q_family.queueFlags & VK_QUEUE_FLAG_BITS_MAX_ENUM) std::cout << "        VK_QUEUE_FLAG_BITS_MAX_ENUM" << std::endl;
-        }
-
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-        std::cout << "    Available extensions: " << extensionCount << std::endl;
-        for (const auto& extension : availableExtensions)
-        {
-            std::cout << "      " << extension.extensionName << std::endl;
-        }
-    }
-
-    const bool Projector::CheckDeviceExtensionSupport(VkPhysicalDevice device) const
-    {
-        uint32_t extensionCount;
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, nullptr);
-        std::vector<VkExtensionProperties> availableExtensions(extensionCount);
-        vkEnumerateDeviceExtensionProperties(device, nullptr, &extensionCount, availableExtensions.data());
-
-        std::set<std::string> requiredExtensions(deviceExtensions.begin(), deviceExtensions.end());
-        for (const auto& extension : availableExtensions)
-        {
-            requiredExtensions.erase(extension.extensionName);
-        }
-        return requiredExtensions.empty();
-    }
-
     const VkShaderModule Projector::CreateShaderModule(const std::vector<char>& code) const
     {
         VkShaderModuleCreateInfo createInfo
@@ -456,25 +377,6 @@ namespace Projector
     const bool Projector::HasStencilComponent(VkFormat format) const
     {
         return format == VK_FORMAT_D32_SFLOAT_S8_UINT || format == VK_FORMAT_D24_UNORM_S8_UINT;
-    }
-
-    const VkSampleCountFlagBits Projector::GetMaxUsableSampleCount(VkPhysicalDevice device) const
-    {
-        VkPhysicalDeviceProperties physicalDeviceProperties;
-        vkGetPhysicalDeviceProperties(device, &physicalDeviceProperties);
-
-        VkSampleCountFlags counts =
-            physicalDeviceProperties.limits.framebufferColorSampleCounts &
-            physicalDeviceProperties.limits.framebufferDepthSampleCounts;
-
-        if (counts & VK_SAMPLE_COUNT_64_BIT) { return VK_SAMPLE_COUNT_64_BIT; }
-        if (counts & VK_SAMPLE_COUNT_32_BIT) { return VK_SAMPLE_COUNT_32_BIT; }
-        if (counts & VK_SAMPLE_COUNT_16_BIT) { return VK_SAMPLE_COUNT_16_BIT; }
-        if (counts & VK_SAMPLE_COUNT_8_BIT) { return VK_SAMPLE_COUNT_8_BIT; }
-        if (counts & VK_SAMPLE_COUNT_4_BIT) { return VK_SAMPLE_COUNT_4_BIT; }
-        if (counts & VK_SAMPLE_COUNT_2_BIT) { return VK_SAMPLE_COUNT_2_BIT; }
-
-        return VK_SAMPLE_COUNT_1_BIT;
     }
 
     void Projector::CreateInstance()
@@ -844,6 +746,7 @@ namespace Projector
                 .samples = gpu_->MaxSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                // .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
@@ -885,11 +788,11 @@ namespace Projector
                 .format = FindDepthFormat(),
                 .samples = gpu_->MaxSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                // .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                //.finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
                 .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             };
             VkAttachmentReference2 depthAttachmentRef
@@ -905,11 +808,12 @@ namespace Projector
                 .format = FindDepthFormat(), //FindDepthFormat(),
                 .samples = VK_SAMPLE_COUNT_1_BIT,
                 .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
                 .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE, //VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL, //VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+                // .finalLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
+                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
             };
             VkAttachmentReference2 depthAttachmentResolveRef
             {
@@ -922,7 +826,7 @@ namespace Projector
                 .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_DEPTH_STENCIL_RESOLVE,
                 .pNext = nullptr,
                 .depthResolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
-                .stencilResolveMode = VK_RESOLVE_MODE_NONE,
+                .stencilResolveMode = VK_RESOLVE_MODE_SAMPLE_ZERO_BIT,
                 .pDepthStencilResolveAttachment = &depthAttachmentResolveRef,
             };
 
@@ -1443,13 +1347,13 @@ namespace Projector
         // Render color image
         {
             VkFormat colorFormat = gpu_->SurfraceFormat().format;
-            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, /*VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |*/ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
             colorImageView_ = Util::CreateImageView(device_, colorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
         // Render depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, renderDepthImage_, renderDepthImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, /*VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |*/ VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, renderDepthImage_, renderDepthImageMemory_);
             renderDepthImageView_ = Util::CreateImageView(device_, renderDepthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
         // Shading rate map image
@@ -1556,7 +1460,7 @@ namespace Projector
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
                 VkFormat depthFormat = FindDepthFormat();
-                Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImagesDepth_[i], resultImagesMemoryDepth_[i]);
+                Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, VK_SAMPLE_COUNT_1_BIT, depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_SAMPLED_BIT | VK_IMAGE_USAGE_TRANSFER_DST_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, resultImagesDepth_[i], resultImagesMemoryDepth_[i]);
                 resultImageViewsDepth_[i] = Util::CreateImageView(device_, resultImagesDepth_[i], depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
                 // Util::TransitionImageLayout(
                 //     device_,
@@ -1685,7 +1589,7 @@ namespace Projector
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .mipLodBias = 0.0f, // Optional
-            .anisotropyEnable = VK_TRUE,
+            .anisotropyEnable = VK_FALSE,
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
             .compareEnable = VK_FALSE,
             .compareOp = VK_COMPARE_OP_ALWAYS,
@@ -1710,7 +1614,7 @@ namespace Projector
             .addressModeV = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .addressModeW = VK_SAMPLER_ADDRESS_MODE_CLAMP_TO_EDGE,
             .mipLodBias = 0.0f, // Optional
-            .anisotropyEnable = VK_TRUE,
+            .anisotropyEnable = VK_FALSE,
             .maxAnisotropy = properties.limits.maxSamplerAnisotropy,
             .compareEnable = VK_FALSE,
             .compareOp = VK_COMPARE_OP_ALWAYS,
@@ -1921,6 +1825,7 @@ namespace Projector
                 {
                     .sampler = warpSamplerDepth_,
                     .imageView = resultImageViewsDepth_[i],
+                    // .imageLayout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_READ_ONLY_OPTIMAL,
                     .imageLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
                 };
 

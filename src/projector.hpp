@@ -110,14 +110,10 @@ namespace Projector
 		void Resized();
 	private:
 		const bool CheckValidationLayerSupport() const;
-		const VkExtent2D ChooseSwapExtent(const VkSurfaceCapabilitiesKHR& capabilities) const;
-		void ListDeviceDetails(VkPhysicalDevice device) const;
-		const bool CheckDeviceExtensionSupport(VkPhysicalDevice device) const;
 		const VkShaderModule CreateShaderModule(const std::vector<char>& code) const;
 		const VkFormat FindSupportedFormat(const std::vector<VkFormat>& candidates, VkImageTiling tiling, VkFormatFeatureFlags features) const;
 		const VkFormat FindDepthFormat() const;
 		const bool HasStencilComponent(VkFormat format) const;
-		const VkSampleCountFlagBits GetMaxUsableSampleCount(VkPhysicalDevice device) const;
 
 		void CreateInstance();
 		void CreateSurface();
