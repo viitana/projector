@@ -40,6 +40,10 @@ namespace Projector
         const bool IsSuitable();
         const bool IsDiscrete();
 
+        const std::vector<VkSampleCountFlagBits>& ValidSampleCounts() const { return m_validSampleCounts; }
+        const void ChooseSampleCount(const VkSampleCountFlagBits sampleCount);
+        const VkSampleCountFlagBits ChosenSampleCount() const { return m_chosenSampleCount; }
+
         private:
 
         const void FindFamilies();
@@ -54,7 +58,10 @@ namespace Projector
         const VkPhysicalDevice m_device = VK_NULL_HANDLE;
         VkPhysicalDeviceProperties m_deviceProperties;
         VkPhysicalDeviceFeatures m_deviceFeatures;
+
+        std::vector<VkSampleCountFlagBits> m_validSampleCounts;
         VkSampleCountFlagBits m_maxSampleCount = VK_SAMPLE_COUNT_1_BIT;
+        VkSampleCountFlagBits m_chosenSampleCount = VK_SAMPLE_COUNT_1_BIT;
 
         // Device extensions
         std::vector<VkExtensionProperties> m_availableDeviceExtensions;

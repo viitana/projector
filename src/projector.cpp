@@ -168,6 +168,25 @@ namespace Projector
                             doRecreateSwapchain = true;
                             overdrawDegrees_ = overdrawDegreesChange_;
                         }
+
+                        // VkSampleCountFlagBits s = VK_SAMPLE_COUNT_16_BIT;
+                        // auto a = MultiSamplingNames[gpu_->ChosenSampleCount()];
+
+
+                        if (ImGui::BeginCombo("Multisampling", MultiSamplingNames.at(gpu_->ChosenSampleCount())))
+                        {
+                            for (const VkSampleCountFlagBits samplingCount : gpu_->ValidSampleCounts())
+                            {
+                                bool selected = samplingCount == gpu_->ChosenSampleCount();
+                                if (ImGui::Selectable(MultiSamplingNames.at(samplingCount), selected))
+                                {
+                                    gpu_->ChooseSampleCount(samplingCount);
+                                    doRecreateSwapchain = true;
+                                }
+                                if (selected) ImGui::SetItemDefaultFocus();
+                            }
+                            ImGui::EndCombo();
+                        }
                         // if (ImGui::BeginCombo("Variable rate shade overdraw", VariableRateShadingNames[variableRateShadingMode_]))
                         // {
                         //     for (int n = 0; n < VariableRateShadingNames.size(); n++)
@@ -743,7 +762,7 @@ namespace Projector
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
                 .format = gpu_->SurfraceFormat().format,
-                .samples = gpu_->MaxSampleCount(),
+                .samples = gpu_->ChosenSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 // .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -763,7 +782,7 @@ namespace Projector
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
                 .format = FindDepthFormat(),
-                .samples = gpu_->MaxSampleCount(),
+                .samples = gpu_->ChosenSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 // .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
@@ -850,11 +869,11 @@ namespace Projector
 
             std::cout << "color format: " << gpu_->SurfraceFormat().format << std::endl;
             std::cout << "depth format: " << FindDepthFormat() << std::endl;
-            std::cout << "sample count: " << gpu_->MaxSampleCount() << std::endl;
+            std::cout << "sample count: " << gpu_->ChosenSampleCount() << std::endl;
 
             // std::vector<VkAttachmentDescription2> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment, depthAttachmentResolve };
             std::vector<VkAttachmentDescription2> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve, depthAttachmentResolve };
-            if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+            if (gpu_->ChosenSampleCount() == VK_SAMPLE_COUNT_1_BIT)
             {
                 subpass.pNext = VK_NULL_HANDLE;
                 subpass.pResolveAttachments = VK_NULL_HANDLE;
@@ -886,7 +905,7 @@ namespace Projector
             VkAttachmentDescription colorAttachment
             {
                 .format = gpu_->SurfraceFormat().format,
-                .samples = gpu_->MaxSampleCount(),
+                .samples = gpu_->ChosenSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -920,7 +939,7 @@ namespace Projector
             VkAttachmentDescription depthAttachment =
             {
                 .format = FindDepthFormat(),
-                .samples = gpu_->MaxSampleCount(),
+                .samples = gpu_->ChosenSampleCount(),
                 .loadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
                 .storeOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
                 .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
@@ -956,7 +975,7 @@ namespace Projector
             // std::vector<VkAttachmentDescription> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment };
             std::vector<VkAttachmentDescription> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
 
-            // if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+            // if (gpu_->ChosenSampleCount() == VK_SAMPLE_COUNT_1_BIT)
             // {
             //     subpass.pResolveAttachments = VK_NULL_HANDLE;
             //     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
@@ -1047,7 +1066,7 @@ namespace Projector
             VkPipelineMultisampleStateCreateInfo multisampling
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                .rasterizationSamples = gpu_->MaxSampleCount(),
+                .rasterizationSamples = gpu_->ChosenSampleCount(),
                 .sampleShadingEnable = VK_FALSE,
                 .minSampleShading = 1.0f, // Optional
                 .pSampleMask = nullptr, // Optional
@@ -1215,7 +1234,7 @@ namespace Projector
             VkPipelineMultisampleStateCreateInfo multisampling
             {
                 .sType = VK_STRUCTURE_TYPE_PIPELINE_MULTISAMPLE_STATE_CREATE_INFO,
-                .rasterizationSamples = gpu_->MaxSampleCount(),
+                .rasterizationSamples = gpu_->ChosenSampleCount(),
                 .sampleShadingEnable = VK_FALSE,
                 .minSampleShading = 1.0f, // Optional
                 .pSampleMask = nullptr, // Optional
@@ -1342,13 +1361,13 @@ namespace Projector
         // Render color image
         {
             VkFormat colorFormat = gpu_->SurfraceFormat().format;
-            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, /*VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |*/ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->ChosenSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, /*VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |*/ VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, colorImage_, colorImageMemory_);
             colorImageView_ = Util::CreateImageView(device_, colorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
         // Render depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, /*VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |*/ VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, renderDepthImage_, renderDepthImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->ChosenSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, /*VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT |*/ VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT | VK_IMAGE_USAGE_TRANSFER_SRC_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, renderDepthImage_, renderDepthImageMemory_);
             renderDepthImageView_ = Util::CreateImageView(device_, renderDepthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
         // Shading rate map image
@@ -1472,13 +1491,13 @@ namespace Projector
         // Warp color image
         {
             VkFormat colorFormat = gpu_->SurfraceFormat().format;
-            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->ChosenSampleCount(), colorFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_TRANSIENT_ATTACHMENT_BIT | VK_IMAGE_USAGE_COLOR_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpColorImage_, warpColorImageMemory_);
             warpColorImageView_ = Util::CreateImageView(device_, warpColorImage_, colorFormat, VK_IMAGE_ASPECT_COLOR_BIT, 1);
         }
         // Warp depth image
         {
             VkFormat depthFormat = FindDepthFormat();
-            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->MaxSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpDepthImage_, warpDepthImageMemory_);
+            Util::CreateImage(gpu_->PhysicalDevice(), device_, renderExtent_.width, renderExtent_.height, 1, gpu_->ChosenSampleCount(), depthFormat, VK_IMAGE_TILING_OPTIMAL, VK_IMAGE_USAGE_DEPTH_STENCIL_ATTACHMENT_BIT, VK_MEMORY_PROPERTY_DEVICE_LOCAL_BIT, warpDepthImage_, warpDepthImageMemory_);
             warpDepthImageView_ = Util::CreateImageView(device_, warpDepthImage_, depthFormat, VK_IMAGE_ASPECT_DEPTH_BIT, 1);
         }
     }
@@ -1498,7 +1517,7 @@ namespace Projector
                     resultImageViewsDepth_[i],
                 };
 
-                if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+                if (gpu_->ChosenSampleCount() == VK_SAMPLE_COUNT_1_BIT)
                 {
                     attachments =
                     {
@@ -1536,7 +1555,7 @@ namespace Projector
                     swapChainImageViews_[i],
                 };
 
-                // if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+                // if (gpu_->ChosenSampleCount() == VK_SAMPLE_COUNT_1_BIT)
                 // {
                 //     attachments =
                 //     {
@@ -2013,7 +2032,7 @@ namespace Projector
             .DescriptorPool = imguiPool_,
             .MinImageCount = 3,
             .ImageCount = 3,
-            .MSAASamples = gpu_->MaxSampleCount(),
+            .MSAASamples = gpu_->ChosenSampleCount(),
         };
         ImGui_ImplVulkan_Init(&init_info, warpRenderPass_);
 

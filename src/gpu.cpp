@@ -19,15 +19,23 @@ namespace Projector
         VkSampleCountFlags counts =
             m_deviceProperties.limits.framebufferColorSampleCounts &
             m_deviceProperties.limits.framebufferDepthSampleCounts;
-        if (counts & VK_SAMPLE_COUNT_64_BIT) m_maxSampleCount = VK_SAMPLE_COUNT_64_BIT;
-        else if (counts & VK_SAMPLE_COUNT_32_BIT) m_maxSampleCount = VK_SAMPLE_COUNT_32_BIT;
-        else if (counts & VK_SAMPLE_COUNT_16_BIT) m_maxSampleCount = VK_SAMPLE_COUNT_16_BIT;
-        else if (counts & VK_SAMPLE_COUNT_8_BIT) m_maxSampleCount = VK_SAMPLE_COUNT_8_BIT;
-        else if (counts & VK_SAMPLE_COUNT_4_BIT) m_maxSampleCount = VK_SAMPLE_COUNT_4_BIT;
-        else if (counts & VK_SAMPLE_COUNT_2_BIT) m_maxSampleCount = VK_SAMPLE_COUNT_2_BIT;
-        else m_maxSampleCount = VK_SAMPLE_COUNT_1_BIT;
 
-        m_maxSampleCount = VK_SAMPLE_COUNT_1_BIT;
+        if (counts & VK_SAMPLE_COUNT_64_BIT) m_validSampleCounts.emplace_back(VK_SAMPLE_COUNT_64_BIT);
+        if (counts & VK_SAMPLE_COUNT_32_BIT) m_validSampleCounts.emplace_back(VK_SAMPLE_COUNT_32_BIT);
+        if (counts & VK_SAMPLE_COUNT_16_BIT) m_validSampleCounts.emplace_back(VK_SAMPLE_COUNT_16_BIT);
+        if (counts & VK_SAMPLE_COUNT_8_BIT)  m_validSampleCounts.emplace_back(VK_SAMPLE_COUNT_8_BIT);
+        if (counts & VK_SAMPLE_COUNT_4_BIT) m_validSampleCounts.emplace_back(VK_SAMPLE_COUNT_4_BIT);
+        if (counts & VK_SAMPLE_COUNT_2_BIT) m_validSampleCounts.emplace_back(VK_SAMPLE_COUNT_2_BIT);
+        m_validSampleCounts.emplace_back(VK_SAMPLE_COUNT_1_BIT);
+
+        m_maxSampleCount = m_validSampleCounts[0];
+        m_chosenSampleCount = m_maxSampleCount;
+
+        if (m_deviceProperties.vendorID == 0x1002) // 0x1002 = AMD PCI vendor ID
+        {
+            // Default AMD GPUs to no multisampling, as depth reslving has issues
+            m_chosenSampleCount = VK_SAMPLE_COUNT_1_BIT;
+        }
 
         // Get device available extensions count
         uint32_t extensionCount;
@@ -343,5 +351,16 @@ namespace Projector
     {
         return m_deviceProperties.deviceType == VK_PHYSICAL_DEVICE_TYPE_DISCRETE_GPU;
     }
-}
 
+    const void GPU::ChooseSampleCount(const VkSampleCountFlagBits sampleCount)
+    {
+        VkSampleCountFlags counts =
+            m_deviceProperties.limits.framebufferColorSampleCounts &
+            m_deviceProperties.limits.framebufferDepthSampleCounts;
+
+        if (counts & sampleCount)
+        {
+            m_chosenSampleCount = sampleCount;
+        }
+    }
+}
