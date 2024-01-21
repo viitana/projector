@@ -2072,14 +2072,25 @@ namespace Projector
             glm::vec3(0.0f, 1.0f, 0.0f)
         );
 
-        glm::mat4 perspective = glm::perspective(
+        glm::mat4 renderPerspective = glm::perspective(
             glm::radians(renderFov_),
             swapChainExtent_.width / (float)swapChainExtent_.height,
             0.01f,
             100.0f
         );
-        perspective[1][1] *= -1; // Compensate for inverted clip Y axis on OpenGL
-        glm::mat4 inversePerspective = glm::inverse(perspective);
+
+        glm::mat4 warpPerspective = glm::perspective(
+            glm::radians(fov_),
+            swapChainExtent_.width / (float)swapChainExtent_.height,
+            0.01f,
+            100.0f
+        );
+
+        // Compensate for inverted clip Y axis on OpenGL
+        renderPerspective[1][1] *= -1;
+        warpPerspective[1][1] *= -1;
+
+        glm::mat4 inverseRenderPerspective = glm::inverse(renderPerspective);
 
         glm::mat4 screen = glm::translate(
             glm::mat4(1.0f),
@@ -2089,15 +2100,15 @@ namespace Projector
         UniformBufferObject mainUbo
         {
             .view = renderView,
-            .proj = perspective,
+            .proj = renderPerspective,
         };
         memcpy(uniformBuffersMapped_[renderFrame_], &mainUbo, sizeof(mainUbo));
 
         WarpUniformBufferObject warpUbo
         {
             .view = warpView,
-            .proj = perspective,
-            .inverseProj = inversePerspective,
+            .proj = warpPerspective,
+            .inverseProj = inverseRenderPerspective,
             .screen = screen * renderRotation,
             .gridResolution = gridResolution_,
             .screenScale = renderOvershotScreenScale_,
