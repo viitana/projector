@@ -27,6 +27,8 @@ namespace Projector
         else if (counts & VK_SAMPLE_COUNT_2_BIT) m_maxSampleCount = VK_SAMPLE_COUNT_2_BIT;
         else m_maxSampleCount = VK_SAMPLE_COUNT_1_BIT;
 
+        m_maxSampleCount = VK_SAMPLE_COUNT_1_BIT;
+
         // Get device available extensions count
         uint32_t extensionCount;
         vkEnumerateDeviceExtensionProperties(m_device, nullptr, &extensionCount, nullptr);

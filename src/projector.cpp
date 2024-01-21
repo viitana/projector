@@ -759,29 +759,6 @@ namespace Projector
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
 
-            VkAttachmentDescription2 colorAttachmentResolve
-            {
-                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
-                .format = gpu_->SurfraceFormat().format,
-                .samples = VK_SAMPLE_COUNT_1_BIT,
-                .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
-                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
-            };
-            VkAttachmentReference2 colorAttachmentResolveRef
-            {
-                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
-                .attachment = 1,
-                .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
-            };
-
-            std::cout << "color format: " << gpu_->SurfraceFormat().format << std::endl;
-            std::cout << "depth format: " << FindDepthFormat() << std::endl;
-            std::cout << "sample count: " << gpu_->MaxSampleCount() << std::endl;
-
             VkAttachmentDescription2 depthAttachment
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
@@ -798,8 +775,27 @@ namespace Projector
             VkAttachmentReference2 depthAttachmentRef
             {
                 .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
-                .attachment = 2,
+                .attachment = 1,
                 .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
+            };
+
+            VkAttachmentDescription2 colorAttachmentResolve
+            {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
+                .format = gpu_->SurfraceFormat().format,
+                .samples = VK_SAMPLE_COUNT_1_BIT,
+                .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
+                .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
+                .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
+                .initialLayout = VK_IMAGE_LAYOUT_UNDEFINED,
+                .finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL,
+            };
+            VkAttachmentReference2 colorAttachmentResolveRef
+            {
+                .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
+                .attachment = 2,
+                .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
 
             VkAttachmentDescription2 depthAttachmentResolve
@@ -830,33 +826,6 @@ namespace Projector
                 .pDepthStencilResolveAttachment = &depthAttachmentResolveRef,
             };
 
-            // VkAttachmentDescription2 shadingRateAttachment
-            // {
-            //     .sType = VK_STRUCTURE_TYPE_ATTACHMENT_DESCRIPTION_2,
-            //     .format = VK_FORMAT_R8_UINT,
-            //     .samples = VK_SAMPLE_COUNT_1_BIT,
-            //     .loadOp = VK_ATTACHMENT_LOAD_OP_DONT_CARE,
-            //     .storeOp = VK_ATTACHMENT_STORE_OP_STORE,
-            //     .stencilLoadOp = VK_ATTACHMENT_LOAD_OP_CLEAR,
-            //     .stencilStoreOp = VK_ATTACHMENT_STORE_OP_DONT_CARE,
-            //     .initialLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
-            //     .finalLayout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
-            // };
-            // VkAttachmentReference2 shadingRateAttachmentRef
-            // {
-            //     .sType = VK_STRUCTURE_TYPE_ATTACHMENT_REFERENCE_2,
-            //     .attachment = 4,
-            //     .layout = VK_IMAGE_LAYOUT_FRAGMENT_SHADING_RATE_ATTACHMENT_OPTIMAL_KHR,
-            // };
-
-            // VkFragmentShadingRateAttachmentInfoKHR shadingRateAttachmentInfo =
-            // {
-            //     .sType = VK_STRUCTURE_TYPE_FRAGMENT_SHADING_RATE_ATTACHMENT_INFO_KHR,
-            //     .pNext = &depthStencilResolveInfo,
-            //     .pFragmentShadingRateAttachment = &shadingRateAttachmentRef,
-            //     .shadingRateAttachmentTexelSize = gpu_->FramentShadingRateProperties().maxFragmentShadingRateAttachmentTexelSize,
-            // };
-
             VkSubpassDescription2 subpass
             {
                 .sType = VK_STRUCTURE_TYPE_SUBPASS_DESCRIPTION_2,
@@ -879,7 +848,22 @@ namespace Projector
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             };
 
-            std::array<VkAttachmentDescription2, 4> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment, depthAttachmentResolve, /*shadingRateAttachment*/ };
+            std::cout << "color format: " << gpu_->SurfraceFormat().format << std::endl;
+            std::cout << "depth format: " << FindDepthFormat() << std::endl;
+            std::cout << "sample count: " << gpu_->MaxSampleCount() << std::endl;
+
+            // std::vector<VkAttachmentDescription2> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment, depthAttachmentResolve };
+            std::vector<VkAttachmentDescription2> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve, depthAttachmentResolve };
+            if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+            {
+                subpass.pNext = VK_NULL_HANDLE;
+                subpass.pResolveAttachments = VK_NULL_HANDLE;
+                colorAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+                depthAttachment.finalLayout = VK_IMAGE_LAYOUT_SHADER_READ_ONLY_OPTIMAL;
+
+                attachments = { colorAttachment, depthAttachment };
+            }
+
             VkRenderPassCreateInfo2 renderPassInfo
             {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO_2,
@@ -929,9 +913,10 @@ namespace Projector
             };
             VkAttachmentReference colorAttachmentResolveRef
             {
-                .attachment = 1,
+                .attachment = 2,
                 .layout = VK_IMAGE_LAYOUT_COLOR_ATTACHMENT_OPTIMAL,
             };
+
             VkAttachmentDescription depthAttachment =
             {
                 .format = FindDepthFormat(),
@@ -945,7 +930,7 @@ namespace Projector
             };
             VkAttachmentReference depthAttachmentRef
             {
-                .attachment = 2,
+                .attachment = 1,
                 .layout = VK_IMAGE_LAYOUT_DEPTH_STENCIL_ATTACHMENT_OPTIMAL,
             };
 
@@ -968,7 +953,17 @@ namespace Projector
                 .dstAccessMask = VK_ACCESS_COLOR_ATTACHMENT_WRITE_BIT | VK_ACCESS_DEPTH_STENCIL_ATTACHMENT_WRITE_BIT,
             };
 
-            std::array<VkAttachmentDescription, 3> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment };
+            // std::vector<VkAttachmentDescription> attachments = { colorAttachment, colorAttachmentResolve, depthAttachment };
+            std::vector<VkAttachmentDescription> attachments = { colorAttachment, depthAttachment, colorAttachmentResolve };
+
+            // if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+            // {
+            //     subpass.pResolveAttachments = VK_NULL_HANDLE;
+            //     colorAttachment.finalLayout = VK_IMAGE_LAYOUT_PRESENT_SRC_KHR;
+
+            //     attachments = { colorAttachment, depthAttachment };
+            // }
+            
             VkRenderPassCreateInfo renderPassInfo
             {
                 .sType = VK_STRUCTURE_TYPE_RENDER_PASS_CREATE_INFO,
@@ -1495,14 +1490,23 @@ namespace Projector
             mainFramebuffers_.resize(MAX_FRAMES_IN_FLIGHT);
             for (size_t i = 0; i < MAX_FRAMES_IN_FLIGHT; i++)
             {
-                std::array<VkImageView, 4> attachments =
+                std::vector<VkImageView> attachments =
                 {
                     colorImageView_,
-                    resultImageViews_[i],
                     renderDepthImageView_,
+                    resultImageViews_[i],
                     resultImageViewsDepth_[i],
-                    // shadingRateImageView_,
                 };
+
+                if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+                {
+                    attachments =
+                    {
+                        resultImageViews_[i],
+                        resultImageViewsDepth_[i],
+                    };
+                }
+
                 VkFramebufferCreateInfo framebufferInfo
                 {
                     .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -1525,12 +1529,22 @@ namespace Projector
             warpFramebuffers_.resize(swapChainImages_.size());
             for (size_t i = 0; i < swapChainImages_.size(); i++)
             {
-                std::array<VkImageView, 3> attachments =
+                std::vector<VkImageView> attachments =
                 {
                     warpColorImageView_,
-                    swapChainImageViews_[i],
                     warpDepthImageView_,
+                    swapChainImageViews_[i],
                 };
+
+                // if (gpu_->MaxSampleCount() == VK_SAMPLE_COUNT_1_BIT)
+                // {
+                //     attachments =
+                //     {
+                //         swapChainImageViews_[i],
+                //         warpDepthImageView_,
+                //     };
+                // }
+
                 VkFramebufferCreateInfo framebufferInfo
                 {
                     .sType = VK_STRUCTURE_TYPE_FRAMEBUFFER_CREATE_INFO,
@@ -2253,11 +2267,12 @@ namespace Projector
 
         renderTimer_.RecordStartTimestamp(commandBuffer, VK_PIPELINE_STAGE_TOP_OF_PIPE_BIT);
 
-        std::array<VkClearValue, 3> clearValues
+        std::vector<VkClearValue> clearValues
         {
             VkClearValue { .color = {{0.0f, 0.0f, 0.0f, 1.0f}} }, // Color
-            VkClearValue { },
             VkClearValue { .depthStencil = {.depth = 1.0f, .stencil = 0 } }, // Depth
+            VkClearValue { }, // Color resolve
+            VkClearValue { }, // Depth resolve
         };
 
         VkRenderPassBeginInfo renderPassInfo
@@ -2352,8 +2367,8 @@ namespace Projector
         std::array<VkClearValue, 3> clearValues
         {
             VkClearValue { .color = {{0.0f, 0.0f, 0.0f, 1.0f }} }, // Color
-            VkClearValue { },
             VkClearValue { .depthStencil = { .depth = 1.0f, .stencil = 0 } }, // Depth
+            VkClearValue { },
         };
 
         VkRenderPassBeginInfo renderPassInfo
